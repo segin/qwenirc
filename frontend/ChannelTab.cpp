@@ -2,13 +2,13 @@
 #include <QHBoxLayout>
 #include <QLabel>
 
-ChannelTab::ChannelTab(const QString& name, NetworkManager* nm, QWidget* parent)
+ ChannelTab::ChannelTab(const QString& name, NetworkManager* nm, QWidget* parent)
     : QWidget(parent)
     , m_channelName(name)
-    , m_nm(nm)
     , m_chatWidget(nullptr)
     , m_inputEdit(nullptr)
 {
+    Q_UNUSED(nm);
     initializeUI();
 }
 
@@ -38,16 +38,6 @@ void ChannelTab::initializeUI() {
         emit messageSent(text);
         m_inputEdit->clear();
     });
-}
-
-void ChannelTab::setNetworkManager(NetworkManager* nm) {
-    m_nm = nm;
-}
-
-void ChannelTab::sendMessage(const QString& message) const {
-    if (m_nm && !m_channelName.isEmpty()) {
-        m_nm->sendMessage(m_channelName, message);
-    }
 }
 
 void ChannelTab::setTopic(const QString& topic) {

@@ -112,6 +112,9 @@ void MainWindow::initializeUI() {
     IRCMessageModel* serverMsgModel = new IRCMessageModel(this);
     m_serverTab->setChatModel(serverMsgModel);
     m_channelTabs->addTab(m_serverTab, "Server");
+    connect(m_serverTab, &ChannelTab::messageSent, this, [this](const QString& message) {
+        m_network->sendUserInput("Server", message);
+    });
 
     setCentralWidget(centralWidget);
 
@@ -401,11 +404,10 @@ void MainWindow::addChannelTab(const QString& name) {
     m_channelModels[name] = msgModel;
 
     // Add tab
-    ChannelTab* tab = new ChannelTab(name, m_network);
+     ChannelTab* tab = new ChannelTab(name, m_network);
     tab->setChatModel(msgModel);
-    tab->setNetworkManager(m_network);
     connect(tab, &ChannelTab::messageSent, this, [this, name](const QString& message) {
-        m_network->sendMessage(name, message);
+        m_network->sendUserInput(name, message);
     });
 
     m_channelTabs->addTab(tab, name);

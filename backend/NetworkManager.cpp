@@ -61,6 +61,39 @@ void NetworkManager::joinChannel(const QString& channel) {
     sendCommand("NAMES", QStringList() << channel);
 }
 
+void NetworkManager::sendUserInput(const QString& context, const QString& text) {
+    if (text.startsWith('/')) {
+        QStringList parts = text.mid(1).split(' ', Qt::SkipEmptyParts);
+        if (parts.isEmpty()) return;
+        
+        QString cmd = parts[0].toUpper();
+        
+        if (cmd == "JOIN" && parts.size() >= 2) {
+            joinChannel(parts[1]);
+        } else if (cmd == "PART" && parts.size() >= 2) {
+            sendCommand("PART", QStringList() << parts[1]);
+        } else if (cmd == "NICK" && parts.size() >= 2) {
+            setNick(parts[1]);
+        } else if (cmd == "QUIT") {
+            sendCommand("QUIT", QStringList() << (parts.size() >= 2 ? parts.mid(1).join(' ') : "Leaving"));
+        } else if (cmd == "MSG" && parts.size() >= 3) {
+            sendMessage(parts[1], parts.mid(2).join(' '));
+        } else if (cmd == "QUOTE" || cmd == "RAW") {
+            if (parts.size() >= 2) sendRaw(parts.mid(1).join(' ') + "\r\n");
+        } else {
+            sendCommand(cmd, parts.mid(1));
+        }
+    } else {
+        if (!context.isEmpty() && context != "Server") {
+            sendMessage(context, text);
+            
+            IRCMessage msg(MessageType::Message, text, m_nick);
+            msg.setChannel(context);
+            emit channelMessage(context, msg);
+        }
+    }
+}
+
 void NetworkManager::sendNotice(const QString& target, const QString& text) {
     sendCommand("NOTICE", QStringList() << target << text);
 }

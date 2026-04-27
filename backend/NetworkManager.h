@@ -30,6 +30,7 @@ public:
     void disconnect();
     void sendMessage(const QString& channel, const QString& message);
     void joinChannel(const QString& channel);
+    void sendUserInput(const QString& context, const QString& text);
     void sendNotice(const QString& target, const QString& text);
     void setNick(const QString& nick);
     void changeMode(const QString& target, const QString& mode);
