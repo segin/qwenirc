@@ -104,7 +104,7 @@ void MainWindow::initializeUI() {
     mainSplitter->addWidget(m_userList);
 
     centralLayout->addWidget(mainSplitter);
-    mainSplitter->setSizes({100, 0, 100});
+    mainSplitter->setSizes({150, 800, 200});
 
     // Server tab (for connection messages)
     m_serverTab = new ChannelTab("Server", m_network);
