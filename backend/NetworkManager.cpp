@@ -337,14 +337,13 @@ void NetworkManager::handleNotice(const QString& prefix, const QStringList& para
     QString text = params[1];
     QString sender = prefix.section('!', 0, 0);
 
-    IRCMessage msg(MessageType::Notice, text, sender);
-    msg.setChannel(target);
-    
     // Check if a channel tab exists for the target
-    if (m_channels.contains(target) || channel(target)) {
+    if (target.startsWith('#') && (m_channels.contains(target) || channel(target))) {
+        IRCMessage msg(MessageType::Notice, text, sender);
+        msg.setChannel(target);
         emit channelMessage(target, msg);
     } else {
-        // Route to server tab if no matching channel exists
+        // Route to server tab (private notices, AUTH, etc.)
         emit serverChannelMessage(text);
     }
 }
@@ -576,17 +575,17 @@ void NetworkManager::handleNumericReply(const QString& numeric, [[maybe_unused]]
         }
         emit serverChannelMessage("RPL 329 (Channel ID): " + text);
     } else if (num == 367) {
-        QString text = params.value(1, "");
-        if (text.startsWith(':')) {
-            text = text.mid(1);
+        QString banInfo = params.mid(1).join(' ');
+        if (banInfo.startsWith(':')) {
+            banInfo = banInfo.mid(1);
         }
-        emit serverChannelMessage("RPL 367 (Channel bans): " + text);
+        emit serverChannelMessage("RPL 367 (Channel bans): " + banInfo);
     } else if (num == 368) {
-        QString text = params.value(1, "");
-        if (text.startsWith(':')) {
-            text = text.mid(1);
+        QString excInfo = params.mid(1).join(' ');
+        if (excInfo.startsWith(':')) {
+            excInfo = excInfo.mid(1);
         }
-        emit serverChannelMessage("RPL 368 (Channel ban exceptions): " + text);
+        emit serverChannelMessage("RPL 368 (Channel ban exceptions): " + excInfo);
     } else if (num == 401) {
         emit serverError("No such nick: " + params.value(0, ""));
     } else if (num == 433) {
@@ -636,10 +635,14 @@ void NetworkManager::handleNumericReply(const QString& numeric, [[maybe_unused]]
             errText = errText.mid(1);
         }
         emit serverError("RPL " + QString::number(num) + ": " + errText);
-    } else if (num == 5) {
-        emit serverChannelMessage("RPL 5 (Unknown numeric): " + params.join(' '));
+   } else if (num == 5) {
+        emit serverChannelMessage("RPL 5 (Unknown numeric): " + params.mid(1).join(' '));
     } else {
-        emit serverChannelMessage("RPL " + QString::number(num) + ": " + params.join(' '));
+        QString text = params.mid(1).join(' ');
+        if (text.startsWith(':')) {
+            text = text.mid(1);
+        }
+        emit serverChannelMessage("RPL " + QString::number(num) + ": " + text);
     }
 }
 
