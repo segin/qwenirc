@@ -163,10 +163,10 @@ void MainWindow::initializeUI() {
     connect(m_network, &NetworkManager::channelMode, this, &MainWindow::onChannelMode);
     connect(m_network, &NetworkManager::userJoined, this, &MainWindow::onUserJoined);
     connect(m_network, &NetworkManager::userLeft, this, &MainWindow::onUserLeft);
-    connect(m_network, &NetworkManager::userChangedNick, this, &MainWindow::onUserChangedNick);
+   connect(m_network, &NetworkManager::userChangedNick, this, &MainWindow::onUserChangedNick);
     connect(m_network, &NetworkManager::channelRegistered, this, &MainWindow::addChannelTab);
     connect(m_network, &NetworkManager::channelUnregistered, this, &MainWindow::removeChannelTab);
-   connect(m_network, &NetworkManager::namesReceived, this, &MainWindow::onNamesReceived);
+    connect(m_network, &NetworkManager::namesReceived, this, &MainWindow::onNamesReceived);
     connect(m_network, &NetworkManager::namesComplete, this, &MainWindow::onNamesComplete);
 
     // Channel list double-click to join channel
@@ -190,13 +190,6 @@ void MainWindow::initializeUI() {
             }
         }
     });
-
-    connect(m_network, &NetworkManager::channelMessage, this, &MainWindow::onChannelMessage);
-    connect(m_network, &NetworkManager::channelTopic, this, &MainWindow::onChannelTopic);
-    connect(m_network, &NetworkManager::channelMode, this, &MainWindow::onChannelMode);
-    connect(m_network, &NetworkManager::userJoined, this, &MainWindow::onUserJoined);
-    connect(m_network, &NetworkManager::userLeft, this, &MainWindow::onUserLeft);
-      connect(m_network, &NetworkManager::userChangedNick, this, &MainWindow::onUserChangedNick);
 
     // Tab change handling - update current channel and user list
     connect(m_channelTabs, &QTabWidget::currentChanged, this, [this](int index) {
@@ -351,24 +344,13 @@ void MainWindow::onChannelMode(const QString& channel, const QString& mode) {
 }
 
 void MainWindow::onUserJoined(const QString& channel, const IRCUser& user) {
-    IRCMessage msg(MessageType::Join, channel, user.nick());
-    msg.setChannel(channel);
-
     if (channel == m_currentChannel) {
         m_userList->addItem(user.nick());
-    }
-
-    auto* tab = findChannelTab(channel);
-    if (tab) {
-        tab->addMessage(msg);
     }
 }
 
 void MainWindow::onUserLeft(const QString& channel, const QString& nick, const QString& reason) {
     Q_UNUSED(reason);
-    IRCMessage msg(MessageType::Part, channel, nick);
-    msg.setChannel(channel);
-
     if (channel == m_currentChannel) {
         for (int i = 0; i < m_userList->count(); ++i) {
             if (m_userList->item(i)->text() == nick) {
@@ -376,11 +358,6 @@ void MainWindow::onUserLeft(const QString& channel, const QString& nick, const Q
                 break;
             }
         }
-    }
-
-    auto* tab = findChannelTab(channel);
-    if (tab) {
-        tab->addMessage(msg);
     }
 }
 
@@ -412,12 +389,6 @@ void MainWindow::addChannelTab(const QString& name) {
 
     m_channelTabs->addTab(tab, name);
     m_channelList->addItem(name);
-
-    connect(m_network, &NetworkManager::channelMessage, this, [this, name](const QString& channel, const IRCMessage& msg) {
-        if (channel == name && m_channelModels.contains(name)) {
-            m_channelModels[name]->addMessage(msg);
-        }
-    });
 }
 
 void MainWindow::removeChannelTab(const QString& name) {
