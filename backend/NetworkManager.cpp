@@ -306,6 +306,9 @@ void NetworkManager::parseMessage(const QString& line) {
         long num = cmd.toLong(&ok);
         if (ok && num >= 1 && num <= 999) {
             handleNumericReply(QString::number(num), prefix, params);
+        } else {
+            // Unknown command (WALLOPS, etc.) - emit to server tab
+            emit serverChannelMessage(cmd + ": " + params.join(' '));
         }
     }
 }
@@ -336,7 +339,14 @@ void NetworkManager::handleNotice(const QString& prefix, const QStringList& para
 
     IRCMessage msg(MessageType::Notice, text, sender);
     msg.setChannel(target);
-    emit channelMessage(target, msg);
+    
+    // Check if a channel tab exists for the target
+    if (m_channels.contains(target) || channel(target)) {
+        emit channelMessage(target, msg);
+    } else {
+        // Route to server tab if no matching channel exists
+        emit serverChannelMessage(text);
+    }
 }
 
 void NetworkManager::handleNick(const QString& prefix, const QStringList& params) {
@@ -509,17 +519,14 @@ void NetworkManager::handleNumericReply(const QString& numeric, [[maybe_unused]]
     long num = numeric.toLong(&ok);
     if (!ok) return;
 
-    QString nick = params.value(0, "");
-    QString text = params.value(1, "");
-
     if (num == 2) {
-        QString welcome = params.value(0, "");
+        QString welcome = params.value(1, "");
         if (welcome.startsWith(':')) {
             welcome = welcome.mid(1);
         }
         emit serverChannelMessage("RPL 2 (Welcome): " + welcome);
     } else if (num == 375) {
-        QString motd = params.value(0, "");
+        QString motd = params.value(1, "");
         if (motd.startsWith(':')) {
             motd = motd.mid(1);
         }
@@ -557,15 +564,31 @@ void NetworkManager::handleNumericReply(const QString& numeric, [[maybe_unused]]
         }
         emit channelTopic(channel, topic);
     } else if (num == 333) {
+        QString text = params.value(1, "");
+        if (text.startsWith(':')) {
+            text = text.mid(1);
+        }
         emit serverChannelMessage("RPL 333 (Topic set by): " + text);
     } else if (num == 329) {
+        QString text = params.value(1, "");
+        if (text.startsWith(':')) {
+            text = text.mid(1);
+        }
         emit serverChannelMessage("RPL 329 (Channel ID): " + text);
     } else if (num == 367) {
+        QString text = params.value(1, "");
+        if (text.startsWith(':')) {
+            text = text.mid(1);
+        }
         emit serverChannelMessage("RPL 367 (Channel bans): " + text);
     } else if (num == 368) {
+        QString text = params.value(1, "");
+        if (text.startsWith(':')) {
+            text = text.mid(1);
+        }
         emit serverChannelMessage("RPL 368 (Channel ban exceptions): " + text);
     } else if (num == 401) {
-        emit serverError("No such nick: " + nick);
+        emit serverError("No such nick: " + params.value(0, ""));
     } else if (num == 433) {
         setNick(m_nick + "_");
     } else if (num == 315) {
@@ -596,12 +619,11 @@ void NetworkManager::handleNumericReply(const QString& numeric, [[maybe_unused]]
         emit namesReceived(channel, userList);
         emit serverChannelMessage("RPL 353 (Users list): " + channel + " " + users);
     } else if (num == 331) {
+        QString text = params.value(1, "");
         if (text.startsWith(':')) {
             text = text.mid(1);
         }
         emit serverChannelMessage("RPL 331 (Channel topic): " + text);
-    } else if (num == 4) {
-        emit serverError("Unknown command: " + params.value(0, ""));
     } else if (num >= 400 && num <= 420) {
         QString text2 = params.value(1, "");
         if (text2.startsWith(':')) {
@@ -614,8 +636,10 @@ void NetworkManager::handleNumericReply(const QString& numeric, [[maybe_unused]]
             errText = errText.mid(1);
         }
         emit serverError("RPL " + QString::number(num) + ": " + errText);
+    } else if (num == 5) {
+        emit serverChannelMessage("RPL 5 (Unknown numeric): " + params.join(' '));
     } else {
-        emit serverChannelMessage("RPL " + QString::number(num) + ": " + text);
+        emit serverChannelMessage("RPL " + QString::number(num) + ": " + params.join(' '));
     }
 }
 

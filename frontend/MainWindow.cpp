@@ -315,7 +315,9 @@ void MainWindow::onServerError(const QString& error) {
     m_serverTab->addMessage(msg);
 }
 
-void MainWindow::onServerMessage(const QString& message) {
+  void MainWindow::onServerMessage(const QString& message) {
+    IRCMessage msg(MessageType::Message, message, "Server");
+    m_serverTab->addMessage(msg);
     setStatus(message);
 }
 
