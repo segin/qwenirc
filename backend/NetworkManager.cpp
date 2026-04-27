@@ -145,11 +145,6 @@ void NetworkManager::onConnected() {
     sendCommand("NICK", QStringList() << m_nick);
     sendCommand("USER", QStringList() << m_username << "8" << "*" << m_realname);
 
-    // Join the requested channel
-    if (!m_currentChannel.isEmpty()) {
-        joinChannel(m_currentChannel);
-    }
-
     m_pingTimer->start();
 }
 
@@ -485,12 +480,12 @@ void NetworkManager::handleKick(const QString& prefix, const QStringList& params
 }
 
 void NetworkManager::handleCapCommand(const QStringList& params) {
-    if (params.isEmpty()) return;
+    if (params.size() < 2) return;
 
-    QString action = params[0].toUpper();
+    QString action = params[1].toUpper();
 
     if (action == "LS") {
-        QStringList caps = params.mid(1);
+        QStringList caps = params.mid(2);
         for (const auto& cap : caps) {
             QString capName = cap;
             if (capName.startsWith('*')) {
@@ -506,7 +501,7 @@ void NetworkManager::handleCapCommand(const QStringList& params) {
     } else if (action == "ACK") {
         emit serverChannelMessage("Capabilities acknowledged");
         sendRaw("CAP END\r\n");
-    } else if (action == "FAIL") {
+    } else if (action == "NAK") {
         emit serverChannelMessage("Capabilities rejected");
         sendRaw("CAP END\r\n");
     }
@@ -630,21 +625,17 @@ void NetworkManager::handleNumericReply(const QString& numeric, [[maybe_unused]]
         }
         emit serverError("RPL " + QString::number(num) + ": " + errText);
    } else if (num == 5) {
-        QString text = params.mid(1).join(' ');
-        if (text.startsWith(':')) {
-            text = text.mid(1);
-        } else {
-            text.remove(" :");
+        QStringList displayParams = params.mid(1);
+        if (!displayParams.isEmpty() && displayParams.last().startsWith(':')) {
+            displayParams.last() = displayParams.last().mid(1);
         }
-        emit serverChannelMessage("RPL 005 (ISUPPORT): " + text);
+        emit serverChannelMessage("RPL 005 (ISUPPORT): " + displayParams.join(' '));
     } else {
-        QString text = params.mid(1).join(' ');
-        if (text.startsWith(':')) {
-            text = text.mid(1);
-        } else {
-            text.remove(" :");
+        QStringList displayParams = params.mid(1);
+        if (!displayParams.isEmpty() && displayParams.last().startsWith(':')) {
+            displayParams.last() = displayParams.last().mid(1);
         }
-        emit serverChannelMessage("RPL " + QString::number(num) + ": " + text);
+        emit serverChannelMessage("RPL " + QString::number(num) + ": " + displayParams.join(' '));
     }
 }
 
