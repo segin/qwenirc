@@ -3,12 +3,14 @@
 #include <QMessageBox>
 #include <QSettings>
 #include <QRandomGenerator>
+#include <QCheckBox>
 
 ServerDialog::ServerDialog(QWidget* parent)
     : QDialog(parent)
+    , m_channel("")
 {
     setWindowTitle("Connect to IRC");
-    setMinimumSize(450, 320);
+    setMinimumSize(450, 360);
 
     QGridLayout* layout = new QGridLayout(this);
 
@@ -38,21 +40,28 @@ ServerDialog::ServerDialog(QWidget* parent)
     m_channelEdit = new QLineEdit("#qwenirc");
     layout->addWidget(m_channelEdit, 4, 1);
 
+    m_tlsCheckBox = new QCheckBox("Use TLS/SSL");
+    layout->addWidget(m_tlsCheckBox, 5, 0, 1, 2);
+
     m_connectBtn = new QPushButton("Connect");
     m_connectBtn->setDefault(true);
-    layout->addWidget(m_connectBtn, 5, 0);
+    layout->addWidget(m_connectBtn, 6, 0);
 
     m_cancelBtn = new QPushButton("Cancel");
-    layout->addWidget(m_cancelBtn, 5, 1);
+    layout->addWidget(m_cancelBtn, 6, 1);
 
     connect(m_connectBtn, &QPushButton::clicked, this, &ServerDialog::applyConnection);
-    connect(m_cancelBtn, &QPushButton::clicked, this, &QWidget::close);
+    connect(m_cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
+
+    m_portEdit->setValidator(new QIntValidator(1, 65535, this));
 
     // Load saved connection settings
     QSettings settings("QwenIRC", "Connection");
     m_hostEdit->setText(settings.value("host", "irc.libera.chat").toString());
     m_portEdit->setText(settings.value("port", "6667").toString());
     m_nickEdit->setText(settings.value("nick", "guest" + QString::number(QRandomGenerator::global()->bounded(1000))).toString());
+    m_channelEdit->setText(settings.value("channel", "#qwenirc").toString());
+    m_tlsCheckBox->setChecked(settings.value("tls", false).toBool());
 }
 
 void ServerDialog::applyConnection() {
@@ -60,13 +69,16 @@ void ServerDialog::applyConnection() {
     settings.setValue("host", m_hostEdit->text());
     settings.setValue("port", m_portEdit->text());
     settings.setValue("nick", m_nickEdit->text());
+    settings.setValue("channel", m_channelEdit->text());
+    settings.setValue("tls", m_tlsCheckBox->isChecked());
 
     emit connectRequested(
         m_hostEdit->text(),
         static_cast<quint16>(m_portEdit->text().toUInt()),
         m_nickEdit->text(),
         m_passEdit->text(),
-        m_channelEdit->text()
+        m_channelEdit->text(),
+        m_tlsCheckBox->isChecked()
     );
 
     accept();

@@ -24,6 +24,7 @@ void IRCChannel::setPrefix(const QString& prefix) {
 }
 
 void IRCChannel::addUser(const IRCUser& user) {
+    if (m_userSet.contains(user.nick())) return;
     m_userSet.insert(user.nick());
     m_users.append(user);
 }
@@ -52,47 +53,29 @@ void IRCChannel::clear() {
     m_userSet.clear();
 }
 
-   void IRCChannel::applyMode(const QString& modeStr, const QStringList& modeParams, const QString& setter) {
+ void IRCChannel::applyMode(const QString& modeStr, const QStringList& modeParams, const QString& setter) {
+    Q_UNUSED(setter);
     int paramIdx = 0;
-    int i = 0;
-    while (i < modeStr.size()) {
+
+    for (int i = 0; i < modeStr.size(); ++i) {
         QChar c = modeStr[i];
-        if (c == '+' || c == '-') {
-            bool isAdd = (c == '+');
-            i++;
-            while (i < modeStr.size()) {
-                QChar modeChar = modeStr[i];
-                i++;
-                if (modeChar == 'o' || modeChar == 'v') {
-                    // User mode: next param is the nick
-                    if (paramIdx < modeParams.size()) {
-                        QString nick = modeParams[paramIdx];
-                        paramIdx++;
-                        IRCUser* user = findUser(nick);
-                        if (user) {
-                            if (isAdd) {
-                                user->setUserPrefix(QString(modeChar));
-                            } else {
-                                user->setUserPrefix("");
-                            }
-                        }
+        bool isAdd = (c == '+');
+        QChar modeChar = (isAdd || c == '-') ? c : c;
+        if (isAdd || c == '-') {
+            if (modeChar == 'o' || modeChar == 'v' || modeChar == 'h' || modeChar == 'q') {
+                if (paramIdx < modeParams.size()) {
+                    IRCUser* user = findUser(modeParams[paramIdx]);
+                    if (user) {
+                        user->setUserPrefix(isAdd ? QString(modeChar) : QString());
                     }
-                } else if (modeChar == 'k' || modeChar == 'l') {
-                    // Channel key/topic limit: next param is the value
-                    if (paramIdx < modeParams.size()) {
-                        paramIdx++;
-                    }
-                } else if (modeChar == 'b' || modeChar == 'e') {
-                    // Ban/exempt: next param is the ban mask
-                    if (paramIdx < modeParams.size()) {
-                        paramIdx++;
-                    }
+                    paramIdx++;
+                }
+            } else {
+                // Channel-level mode (k, l, b, e, d, etc.): skip associated parameter
+                if (modeChar == 'k' || modeChar == 'l' || modeChar == 'b' || modeChar == 'e' || modeChar == 'd') {
+                    if (paramIdx < modeParams.size()) paramIdx++;
                 }
             }
-        } else {
-            i++;
         }
     }
-    // Store setter info for logging/debugging
-    Q_UNUSED(setter);
 }

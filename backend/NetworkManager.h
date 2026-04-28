@@ -85,20 +85,21 @@ private slots:
     void onDisconnected();
     void onReadyRead();
     void onError(QAbstractSocket::SocketError error);
+    void onSslErrors(const QList<QSslError>& errors);
     void onPingTimeout();
 
 private:
     void parseLine(const QString& line);
-    void parseMessage(const QString& line);
-    void handlePrivMsg(const QString& prefix, const QStringList& params);
-    void handleNotice(const QString& prefix, const QStringList& params);
-    void handleNick(const QString& prefix, const QStringList& params);
-    void handleJoin(const QString& prefix, const QStringList& params);
-    void handlePart(const QString& prefix, const QStringList& params);
+    void parseMessage(const QString& line, const QString& serverTime = {});
+    void handlePrivMsg(const QString& prefix, const QStringList& params, const QString& serverTime = {});
+    void handleNotice(const QString& prefix, const QStringList& params, const QString& serverTime = {});
+    void handleNick(const QString& prefix, const QStringList& params, const QString& serverTime = {});
+    void handleJoin(const QString& prefix, const QStringList& params, const QString& serverTime = {});
+    void handlePart(const QString& prefix, const QStringList& params, const QString& serverTime = {});
     void handleMode(const QString& prefix, const QStringList& params);
     void handleTopic(const QString& prefix, const QStringList& params);
-    void handleQuit(const QString& prefix, const QStringList& params);
-    void handleKick(const QString& prefix, const QStringList& params);
+    void handleQuit(const QString& prefix, const QStringList& params, const QString& serverTime = {});
+    void handleKick(const QString& prefix, const QStringList& params, const QString& serverTime = {});
     void handleCapCommand(const QStringList& params);
     void handleNumericReply(const QString& numeric, const QString& prefix, const QStringList& params);
 
@@ -125,6 +126,9 @@ private:
     QByteArray m_lineBuffer;
     int m_nickRetries = 0;
     bool m_waitingCaps = false;
+    QMap<QString, QString> m_isupport;
+
+    QChar extractModePrefix(const QString& nick);
 };
 
 #endif // NETWORKMANAGER_H

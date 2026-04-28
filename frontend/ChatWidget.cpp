@@ -1,4 +1,5 @@
 #include "ChatWidget.h"
+#include "backend/IRCMessageModel.h"
 #include <QLabel>
 #include <QDateTime>
 #include <QScrollBar>
@@ -8,6 +9,8 @@
 #include <QFrame>
 #include <QApplication>
 #include <QTextDocument>
+#include <QTextBlock>
+#include <QTextLength>
 #include <QPalette>
 
 class ChatItemDelegate : public QStyledItemDelegate {
@@ -27,7 +30,6 @@ public:
 
         painter->translate(0, rect.top());
 
-        doc.setPageSize(QSize(option.rect.width(), 10000));
         QRect clipRect(QPoint(0, 0), option.rect.size());
         doc.drawContents(painter, clipRect);
 
@@ -35,9 +37,30 @@ public:
     }
 
      QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override {
-        Q_UNUSED(option);
-        Q_UNUSED(index);
-        return QSize(0, 18);
+        QString text = index.data(Qt::DisplayRole).toString();
+        QTextDocument doc;
+        doc.setHtml(text);
+        doc.setTextWidth(option.rect.width());
+        // Calculate total height by iterating through all blocks
+        qreal totalHeight = 0;
+        for (QTextBlock block = doc.begin(); block.isValid(); block = block.next()) {
+            QTextLayout* layout = block.layout();
+            if (layout && layout->lineCount() > 0) {
+                for (int i = 0; i < layout->lineCount(); i++) {
+                    QTextLine line = layout->lineAt(i);
+                    if (line.isValid()) {
+                        QRectF rect = line.rect();
+                        totalHeight += rect.height();
+                    }
+                }
+            } else {
+                // Fallback: estimate single-line height from font
+                QFontMetrics fm(option.font);
+                totalHeight += fm.height() * 1.5;
+            }
+        }
+        if (totalHeight <= 0) totalHeight = 18;
+        return QSize(option.rect.width(), qCeil(totalHeight + 4));
     }
 };
 
@@ -120,6 +143,9 @@ void ChatWidget::scrollToBottom() {
 
     QScrollBar* scroll = m_chatList->verticalScrollBar();
     if (scroll) {
-        scroll->setValue(scroll->maximum());
+        // Only scroll to bottom if user was already at bottom
+        if (scroll->value() >= scroll->maximum() - 4) {
+            scroll->setValue(scroll->maximum());
+        }
     }
 }

@@ -5,7 +5,8 @@
 #include <QLineEdit>
 #include <QGridLayout>
 #include <QPushButton>
-#include <QComboBox>
+#include <QIntValidator>
+#include <QCheckBox>
 
 class ServerDialog : public QDialog {
     Q_OBJECT
@@ -26,7 +27,7 @@ public:
 signals:
     void connectRequested(const QString& host, quint16 port,
                           const QString& nick, const QString& pass,
-                          const QString& channel);
+                          const QString& channel, bool useTLS);
 
 private:
     void applyConnection();
@@ -36,9 +37,10 @@ private:
     QLineEdit* m_nickEdit;
     QLineEdit* m_passEdit;
     QLineEdit* m_channelEdit;
-    QComboBox* m_themeCombo;
     QPushButton* m_connectBtn;
     QPushButton* m_cancelBtn;
+    QCheckBox* m_tlsCheckBox;
+    QString m_channel;
 };
 
 #endif // SERVERDIALOG_H
