@@ -324,6 +324,9 @@ void MainWindow::onServerChannelMessage(const QString& message) {
 
 void MainWindow::onChannelMessage(const QString& channel, const IRCMessage& msg) {
     auto* tab = findChannelTab(channel);
+    if (!tab) {
+        tab = findQueryTab(channel);
+    }
     if (tab) {
         tab->addMessage(msg);
     }
@@ -429,4 +432,35 @@ void MainWindow::onNamesReceived(const QString& channel, const QList<IRCUser>& u
 
 void MainWindow::onNamesComplete(const QString& channel) {
     Q_UNUSED(channel);
+}
+
+void MainWindow::addQueryTab(const QString& name) {
+    // Check if query tab already exists
+    for (int i = 0; i < m_channelTabs->count(); ++i) {
+        if (m_channelTabs->tabText(i) == name) {
+            return;
+        }
+    }
+
+    IRCMessageModel* msgModel = new IRCMessageModel(this);
+    m_queryModels[name] = msgModel;
+
+    ChannelTab* tab = new ChannelTab(name, m_network);
+    tab->setChatModel(msgModel);
+    tab->setTopicVisible(false);
+    connect(tab, &ChannelTab::messageSent, this, [this, name](const QString& message) {
+        m_network->sendUserInput(name, message);
+    });
+
+    m_channelTabs->insertTab(0, tab, name);
+    m_channelTabs->setCurrentWidget(tab);
+}
+
+ChannelTab* MainWindow::findQueryTab(const QString& name) {
+    for (int i = 0; i < m_channelTabs->count(); ++i) {
+        if (m_channelTabs->tabText(i) == name) {
+            return qobject_cast<ChannelTab*>(m_channelTabs->widget(i));
+        }
+    }
+    return nullptr;
 }

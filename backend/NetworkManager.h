@@ -63,7 +63,7 @@ signals:
     void channelTopic(const QString& channel, const QString& topic);
     void channelMode(const QString& channel, const QString& mode);
     void userJoined(const QString& channel, const IRCUser& user);
-     void userLeft(const QString& channel, const QString& nick, const QString& reason);
+    void userLeft(const QString& channel, const QString& nick, const QString& reason);
     void userChangedNick(const QString& oldNick, const QString& newNick);
     void nickSet(const QString& nick);
     void noticeReceived(const QString& sender, const QString& text);
@@ -74,6 +74,8 @@ signals:
     void whoisAccount(const QString& nick, const QString& account);
     void whoisChannels(const QString& nick, const QString& channels);
     void whoisDone(const QString& nick);
+    void ctcpRequest(const QString& nick, const QString& command, const QString& text);
+    void ctcpReply(const QString& nick, const QString& command, const QString& text);
 
 private slots:
     void onConnected();
@@ -99,6 +101,9 @@ private:
 
     void sendRaw(const QString& data);
     void sendCommand(const QString& cmd, const QStringList& params);
+    void sendCtcpVersionReply(const QString& target);
+    bool isCtcpMessage(const QString& message);
+    void parseCtcpMessage(const QString& message, QString& command, QString& text);
 
     QTcpSocket* m_socket;
     QString m_host;

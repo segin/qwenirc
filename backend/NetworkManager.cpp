@@ -80,6 +80,16 @@ void NetworkManager::sendUserInput(const QString& context, const QString& text) 
             sendMessage(parts[1], parts.mid(2).join(' '));
         } else if (cmd == "QUOTE" || cmd == "RAW") {
             if (parts.size() >= 2) sendRaw(parts.mid(1).join(' ') + "\r\n");
+        } else if (cmd == "TOPIC") {
+            if (context.startsWith('#') && context != "Server") {
+                if (parts.size() >= 2) {
+                    setTopic(context, parts.mid(1).join(' '));
+                } else {
+                    sendCommand("TOPIC", QStringList() << context);
+                }
+            } else {
+                emit serverChannelMessage("Error: /topic is only valid inside a channel tab.");
+            }
         } else {
             sendCommand(cmd, parts.mid(1));
         }
@@ -348,13 +358,49 @@ void NetworkManager::handlePrivMsg(const QString& prefix, const QStringList& par
     QString message = params[1];
     QString senderNick = prefix.section('!', 0, 0);
 
-    IRCMessage msg(MessageType::Message, message, senderNick);
-    msg.setChannel(chanName);
-    emit channelMessage(chanName, msg);
+    // Handle CTCP messages (content wrapped in \001 delimiters)
+    if (isCtcpMessage(message)) {
+        QString ctcpCommand;
+        QString ctcpText;
+        parseCtcpMessage(message, ctcpCommand, ctcpText);
 
-    auto* ch = channel(chanName);
-    if (ch) {
-        ch->addMessage(msg);
+        if (ctcpCommand.toUpper() == "VERSION") {
+            sendCtcpVersionReply(chanName);
+            emit ctcpRequest(senderNick, "VERSION", ctcpText);
+        } else if (ctcpCommand.toUpper() == "FINGER") {
+            emit ctcpRequest(senderNick, "FINGER", ctcpText);
+        } else if (ctcpCommand.toUpper() == "ACTION") {
+            IRCMessage actionMsg(MessageType::Message, "*" + ctcpText + "*", senderNick);
+            actionMsg.setChannel(chanName);
+            emit channelMessage(chanName, actionMsg);
+
+            auto* ch = channel(chanName);
+            if (ch) {
+                ch->addMessage(actionMsg);
+            }
+        } else {
+            emit ctcpRequest(senderNick, ctcpCommand, ctcpText);
+        }
+        return;
+    }
+
+    // Route private messages (target is own nick) to query tab
+    QString targetNick = chanName;
+    bool isPrivate = (targetNick == m_nick);
+
+    if (isPrivate) {
+        IRCMessage msg(MessageType::Message, message, senderNick);
+        msg.setChannel(senderNick);
+        emit channelMessage(senderNick, msg);
+    } else {
+        IRCMessage msg(MessageType::Message, message, senderNick);
+        msg.setChannel(chanName);
+        emit channelMessage(chanName, msg);
+
+        auto* ch = channel(chanName);
+        if (ch) {
+            ch->addMessage(msg);
+        }
     }
 }
 
@@ -365,13 +411,31 @@ void NetworkManager::handleNotice(const QString& prefix, const QStringList& para
     QString text = params[1];
     QString sender = prefix.section('!', 0, 0);
 
+    // Handle CTCP notices
+    if (isCtcpMessage(text)) {
+        QString ctcpCommand;
+        QString ctcpText;
+        parseCtcpMessage(text, ctcpCommand, ctcpText);
+
+        if (ctcpCommand.toUpper() == "VERSION") {
+            sendCtcpVersionReply(target);
+            emit ctcpReply(sender, "VERSION", ctcpText);
+        } else {
+            emit ctcpReply(sender, ctcpCommand, ctcpText);
+        }
+        return;
+    }
+
     // Check if a channel tab exists for the target
     if (target.startsWith('#') && (m_channels.contains(target) || channel(target))) {
         IRCMessage msg(MessageType::Notice, text, sender);
         msg.setChannel(target);
         emit channelMessage(target, msg);
     } else {
-        emit serverChannelMessage("[" + sender + "] " + text);
+        // Route private notices to query tab
+        IRCMessage msg(MessageType::Notice, text, sender);
+        msg.setChannel(sender);
+        emit channelMessage(sender, msg);
     }
 }
 
@@ -572,7 +636,7 @@ void NetworkManager::handleNumericReply(const QString& numeric, [[maybe_unused]]
             m_currentChannel.clear();
         }
     } else if (num == 366) {
-        QString channel = params.value(0, "");
+        QString channel = params.value(1, "");
         emit namesComplete(channel);
         sendCommand("TOPIC", QStringList() << channel);
         sendCommand("MODE", QStringList() << channel);
@@ -613,14 +677,20 @@ void NetworkManager::handleNumericReply(const QString& numeric, [[maybe_unused]]
     } else if (num == 433) {
         setNick(m_nick + "_");
     } else if (num == 315) {
-        emit namesComplete(params.value(0, ""));
-        emit serverChannelMessage("RPL 315 (End of names): " + params.value(0, ""));
+        emit namesComplete(params.value(1, ""));
+        emit serverChannelMessage("RPL 315 (End of names): " + params.value(1, ""));
     } else if (num == 353) {
-        QString channel = params.value(0, "");
-        QString users = params.value(2, "");
+        QString channel = params.value(2, "");
+        QString users = params.value(3, "");
         QStringList userParts = users.split(' ');
-        QList<IRCUser> userList;
+        QStringList nonEmpty;
         for (const QString& u : userParts) {
+            if (!u.isEmpty()) {
+                nonEmpty.append(u);
+            }
+        }
+        QList<IRCUser> userList;
+        for (const QString& u : nonEmpty) {
             QString nick = u;
             QString mode = "";
             if (!nick.isEmpty() && !nick.startsWith('#')) {
@@ -675,6 +745,28 @@ void NetworkManager::handleNumericReply(const QString& numeric, [[maybe_unused]]
 void NetworkManager::sendRaw(const QString& data) {
     m_socket->write(data.toUtf8());
     m_socket->flush();
+}
+
+bool NetworkManager::isCtcpMessage(const QString& message) {
+    if (message.length() < 3) return false;
+    return message.startsWith('\001') && message.endsWith('\001');
+}
+
+void NetworkManager::parseCtcpMessage(const QString& message, QString& command, QString& text) {
+    QString inner = message.mid(1, message.length() - 2);
+    int spaceIdx = inner.indexOf(' ');
+    if (spaceIdx > 0) {
+        command = inner.mid(0, spaceIdx);
+        text = inner.mid(spaceIdx + 1);
+    } else {
+        command = inner;
+        text = "";
+    }
+}
+
+void NetworkManager::sendCtcpVersionReply(const QString& target) {
+    QString reply = "\001VERSION\001 QwenIRC 0.1.0 \001";
+    sendCommand("NOTICE", QStringList() << target << reply);
 }
 
 void NetworkManager::sendCommand(const QString& cmd, const QStringList& params) {

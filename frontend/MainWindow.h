@@ -44,11 +44,14 @@ private slots:
     void addChannelTab(const QString& name);
     void removeChannelTab(const QString& name);
     void setStatus(const QString& status);
-    void onNamesReceived(const QString& channel, const QList<IRCUser>& users);
+   void onNamesReceived(const QString& channel, const QList<IRCUser>& users);
     void onNamesComplete(const QString& channel);
+
+    void addQueryTab(const QString& name);
 
 private:
     ChannelTab* findChannelTab(const QString& name);
+    ChannelTab* findQueryTab(const QString& name);
     void initializeUI();
     void createMenus();
     void createToolBars();
@@ -68,8 +71,9 @@ private:
     QStatusBar* m_statusBar;
     QSplitter* m_mainSplitter;
     QMap<QString, IRCMessageModel*> m_channelModels;
+    QMap<QString, IRCMessageModel*> m_queryModels;
     IRCChannelModel* m_channelModel;
-   QString m_currentChannel;
+    QString m_currentChannel;
     QString m_serverInfo;
     QAction* m_disconnectAction;
     ChannelTab* m_serverTab;
