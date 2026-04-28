@@ -168,6 +168,7 @@ void MainWindow::initializeUI() {
     connect(m_network, &NetworkManager::channelUnregistered, this, &MainWindow::removeChannelTab);
     connect(m_network, &NetworkManager::namesReceived, this, &MainWindow::onNamesReceived);
     connect(m_network, &NetworkManager::namesComplete, this, &MainWindow::onNamesComplete);
+    connect(m_network, &NetworkManager::queryTabNeeded, this, &MainWindow::addQueryTab);
 
     // Channel list double-click to join channel
     connect(m_channelList, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem* item) {
@@ -425,7 +426,13 @@ void MainWindow::onNamesReceived(const QString& channel, const QList<IRCUser>& u
     if (channel == m_currentChannel && m_userList->isVisible()) {
         m_userList->clear();
         for (const auto& user : users) {
-            m_userList->addItem(user.nick());
+            QString nick = user.nick();
+            QString mode = user.userPrefix();
+            if (!mode.isEmpty()) {
+                m_userList->addItem(mode + nick);
+            } else {
+                m_userList->addItem(nick);
+            }
         }
     }
 }

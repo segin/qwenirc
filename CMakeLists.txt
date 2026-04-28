@@ -30,8 +30,8 @@ add_executable(qwenirc
     backend/NetworkManager.h
     backend/IRCChannel.cpp
     backend/IRCChannel.h
-    backend/IRCUser.cpp
     backend/IRCUser.h
+    backend/IRCUser.cpp
     backend/IRCMessage.cpp
     backend/IRCMessage.h
     backend/IRCMessageModel.cpp

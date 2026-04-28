@@ -14,7 +14,7 @@ public:
     QString name() const { return m_name; }
     QString topic() const { return m_topic; }
     QList<IRCUser> users() const { return m_users; }
-    const IRCUser* findUser(const QString& nick) const;
+    IRCUser* findUser(const QString& nick);
     QList<IRCMessage> messages() const { return m_messages; }
     QString prefix() const { return m_prefix; }
 
@@ -24,7 +24,7 @@ public:
     void removeUser(const QString& nick);
     void addMessage(const IRCMessage& msg);
     void clear();
-    void applyMode(const QString& modeStr);
+    void applyMode(const QString& modeStr, const QStringList& modeParams, const QString& setter);
 
 private:
     static const int MAX_MESSAGES = 10000;

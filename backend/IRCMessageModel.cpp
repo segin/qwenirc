@@ -135,8 +135,8 @@ QVariant IRCUserModel::data(const QModelIndex& index, int role) const {
     switch (role) {
     case Qt::DisplayRole: {
         QString mode;
-        if (!user.mode().isEmpty()) {
-            mode = user.mode().front();
+        if (!user.userPrefix().isEmpty()) {
+            mode = user.userPrefix().front();
         }
         return QString("%1%2").arg(mode).arg(user.nick());
     }

@@ -263,19 +263,30 @@ void NetworkManager::onPingTimeout() {
 
 void NetworkManager::parseLine(const QString& line) {
     // Handle IRCv3 message tags: @key1=val1;key2=val2 :nick!id@host CMD params
+    QString serverTime;
     if (line.startsWith('@')) {
         int spaceIdx = line.indexOf(' ');
         if (spaceIdx > 0) {
+            QString tags = line.mid(1, spaceIdx - 1);
             QString rest = line.mid(spaceIdx + 1);
-            parseMessage(rest);
+            
+            // Extract server-time tag
+            QStringList tagPairs = tags.split(';', Qt::SkipEmptyParts);
+            for (const QString& tag : tagPairs) {
+                QStringList kv = tag.split('=');
+                if (kv.size() == 2 && kv[0] == "time") {
+                    serverTime = kv[1];
+                }
+            }
+            parseMessage(rest, serverTime);
             return;
         }
     }
 
-    parseMessage(line);
+    parseMessage(line, serverTime);
 }
 
-void NetworkManager::parseMessage(const QString& line) {
+void NetworkManager::parseMessage(const QString& line, const QString& serverTime) {
     QString prefix;
     QString cmd;
     QStringList params;
@@ -334,23 +345,23 @@ void NetworkManager::parseMessage(const QString& line) {
     } else if (cmd == "CAP") {
         handleCapCommand(params);
     } else if (cmd == "PRIVMSG") {
-        handlePrivMsg(prefix, params);
+        handlePrivMsg(prefix, params, serverTime);
     } else if (cmd == "NICK") {
-        handleNick(prefix, params);
+        handleNick(prefix, params, serverTime);
     } else if (cmd == "JOIN") {
-        handleJoin(prefix, params);
+        handleJoin(prefix, params, serverTime);
     } else if (cmd == "PART") {
-        handlePart(prefix, params);
+        handlePart(prefix, params, serverTime);
     } else if (cmd == "MODE") {
         handleMode(prefix, params);
     } else if (cmd == "TOPIC") {
         handleTopic(prefix, params);
     } else if (cmd == "QUIT") {
-        handleQuit(prefix, params);
+        handleQuit(prefix, params, serverTime);
     } else if (cmd == "NOTICE") {
-        handleNotice(prefix, params);
+        handleNotice(prefix, params, serverTime);
     } else if (cmd == "KICK") {
-        handleKick(prefix, params);
+        handleKick(prefix, params, serverTime);
     } else if (cmd == "PONG") {
         emit serverChannelMessage("PONG: " + params.join(' '));
     } else {
@@ -365,13 +376,19 @@ void NetworkManager::parseMessage(const QString& line) {
     }
 }
 
-void NetworkManager::handlePrivMsg(const QString& prefix, const QStringList& params) {
+void NetworkManager::handlePrivMsg(const QString& prefix, const QStringList& params, const QString& serverTime) {
     if (params.size() < 2) return;
 
     QString chanName = params[0];
     QString message = params[1];
     QString senderNick = prefix.section('!', 0, 0);
     bool isPrivateMsg = (chanName == m_nick);
+
+    IRCMessage msg(MessageType::Message, message, senderNick);
+    msg.setChannel(chanName);
+    if (!serverTime.isEmpty()) {
+        msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate));
+    }
 
     // Handle CTCP messages (content wrapped in \001 delimiters)
     if (isCtcpMessage(message)) {
@@ -387,6 +404,9 @@ void NetworkManager::handlePrivMsg(const QString& prefix, const QStringList& par
         } else  if (ctcpCommand.toUpper() == "ACTION") {
             IRCMessage actionMsg(MessageType::Message, "*" + ctcpText + "*", senderNick);
             actionMsg.setChannel(chanName);
+            if (!serverTime.isEmpty()) {
+                actionMsg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate));
+            }
             if (isPrivateMsg) {
                 emit channelMessage(senderNick, actionMsg);
             } else {
@@ -397,21 +417,17 @@ void NetworkManager::handlePrivMsg(const QString& prefix, const QStringList& par
             if (ch) {
                 ch->addMessage(actionMsg);
             }
-        } else {
-            emit ctcpRequest(senderNick, ctcpCommand, ctcpText);
+   } else {
+        emit ctcpRequest(senderNick, ctcpCommand, ctcpText);
         }
         return;
     }
 
     // Route private messages (target is own nick) to query tab
     if (isPrivateMsg) {
-        IRCMessage msg(MessageType::Message, message, senderNick);
-        msg.setChannel(senderNick);
         emit channelMessage(senderNick, msg);
         emit queryTabNeeded(senderNick);
     } else {
-        IRCMessage msg(MessageType::Message, message, senderNick);
-        msg.setChannel(chanName);
         emit channelMessage(chanName, msg);
 
         auto* ch = channel(chanName);
@@ -421,7 +437,7 @@ void NetworkManager::handlePrivMsg(const QString& prefix, const QStringList& par
     }
 }
 
-void NetworkManager::handleNotice(const QString& prefix, const QStringList& params) {
+void NetworkManager::handleNotice(const QString& prefix, const QStringList& params, const QString& serverTime) {
     if (params.size() < 2) return;
 
     QString target = params[0];
@@ -444,20 +460,21 @@ void NetworkManager::handleNotice(const QString& prefix, const QStringList& para
     }
 
     // Check if a channel tab exists for the target
+    IRCMessage msg(MessageType::Notice, text, sender);
+    msg.setChannel(target);
+    if (!serverTime.isEmpty()) {
+        msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate));
+    }
+
     if (target.startsWith('#') && (m_channels.contains(target) || channel(target))) {
-        IRCMessage msg(MessageType::Notice, text, sender);
-        msg.setChannel(target);
         emit channelMessage(target, msg);
     } else {
-        // Route private notices to query tab
-        IRCMessage msg(MessageType::Notice, text, sender);
-        msg.setChannel(sender);
         emit channelMessage(sender, msg);
         emit queryTabNeeded(sender);
     }
 }
 
-void NetworkManager::handleNick(const QString& prefix, const QStringList& params) {
+void NetworkManager::handleNick(const QString& prefix, const QStringList& params, const QString& serverTime) {
     if (params.isEmpty()) return;
 
     QString newNick = params[0];
@@ -471,8 +488,11 @@ void NetworkManager::handleNick(const QString& prefix, const QStringList& params
     emit userChangedNick(oldNick, newNick);
 
     IRCMessage msg(MessageType::NickChange,
-                  QString("%1 -> %2").arg(oldNick).arg(newNick),
-                  oldNick);
+                   QString("%1 -> %2").arg(oldNick).arg(newNick),
+                   oldNick);
+    if (!serverTime.isEmpty()) {
+        msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate));
+    }
 
     for (auto it = m_channels.begin(); it != m_channels.end(); ++it) {
         IRCChannel* ch = it.value();
@@ -482,7 +502,7 @@ void NetworkManager::handleNick(const QString& prefix, const QStringList& params
     }
 }
 
-void NetworkManager::handleJoin(const QString& prefix, const QStringList& params) {
+void NetworkManager::handleJoin(const QString& prefix, const QStringList& params, const QString& serverTime) {
     if (params.isEmpty()) return;
 
     QString chanName = params[0];
@@ -495,6 +515,10 @@ void NetworkManager::handleJoin(const QString& prefix, const QStringList& params
     IRCUser user(nick);
 
     IRCMessage msg(MessageType::Join, chanName, nick);
+    if (!serverTime.isEmpty()) {
+        msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate));
+    }
+
     emit channelMessage(chanName, msg);
     emit userJoined(chanName, user);
 
@@ -505,7 +529,7 @@ void NetworkManager::handleJoin(const QString& prefix, const QStringList& params
     }
 }
 
-void NetworkManager::handlePart(const QString& prefix, const QStringList& params) {
+void NetworkManager::handlePart(const QString& prefix, const QStringList& params, const QString& serverTime) {
     if (params.isEmpty()) return;
 
     QString chanName = params[0];
@@ -517,6 +541,10 @@ void NetworkManager::handlePart(const QString& prefix, const QStringList& params
     }
 
     IRCMessage msg(MessageType::Part, chanName + " " + reason, nick);
+    if (!serverTime.isEmpty()) {
+        msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate));
+    }
+
     emit channelMessage(chanName, msg);
     emit userLeft(chanName, nick, reason);
 
@@ -562,11 +590,14 @@ void NetworkManager::handleTopic(const QString& prefix, const QStringList& param
     emit channelMessage(chanName, msg);
 }
 
-void NetworkManager::handleQuit(const QString& prefix, const QStringList& params) {
+void NetworkManager::handleQuit(const QString& prefix, const QStringList& params, const QString& serverTime) {
     QString nick = prefix.section('!', 0, 0);
     QString reason = params.isEmpty() ? "" : params[0];
 
     IRCMessage msg(MessageType::Quit, "Quit", nick);
+    if (!serverTime.isEmpty()) {
+        msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate));
+    }
 
     for (auto it = m_channels.begin(); it != m_channels.end(); ++it) {
         IRCChannel* ch = it.value();
@@ -578,7 +609,7 @@ void NetworkManager::handleQuit(const QString& prefix, const QStringList& params
     }
 }
 
-void NetworkManager::handleKick(const QString& prefix, const QStringList& params) {
+void NetworkManager::handleKick(const QString& prefix, const QStringList& params, const QString& serverTime) {
     if (params.size() < 2) return;
 
     QString kicker = prefix.section('!', 0, 0);
@@ -593,6 +624,9 @@ void NetworkManager::handleKick(const QString& prefix, const QStringList& params
         QString("%1 was kicked by %2%3").arg(kicked).arg(kicker).arg(reason.isEmpty() ? "" : " (" + reason + ")"),
         kicker);
     msg.setChannel(chanName);
+    if (!serverTime.isEmpty()) {
+        msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate));
+    }
 
     emit channelMessage(chanName, msg);
     emit userLeft(chanName, kicked, reason);
@@ -782,7 +816,7 @@ void NetworkManager::handleNumericReply(const QString& numeric, [[maybe_unused]]
                 if (!nick.isEmpty()) {
                     emit userReceived(channel, nick);
                     IRCUser user(nick);
-                    user.setMode(mode);
+                    user.setUserPrefix(mode);
                     userList.append(user);
                 }
             }
