@@ -27,7 +27,7 @@ void IRCMessageModel::clear() {
 }
 
 void IRCMessageModel::insertSystemMessage(const QString& text) {
-    IRCMessage msg(MessageType::TopicSet, text);
+    IRCMessage msg(MessageType::System, text);
     addMessage(msg);
 }
 
@@ -44,28 +44,14 @@ QVariant IRCMessageModel::data(const QModelIndex& index, int role) const {
     const auto& msg = m_messages[index.row()];
 
     switch (role) {
-    case Qt::DisplayRole:
-        return msg.coloredText();
-    case TypeRole:
-        return static_cast<int>(msg.type());
-    case ColorRole:
-        switch (msg.type()) {
-        case MessageType::Message: return "#888888";
-        case MessageType::NickChange: return "#FF8888";
-        case MessageType::Join: return "#88FF88";
-        case MessageType::Part: return "#FF8888";
-        case MessageType::Quit: return "#FF8888";
-        case MessageType::Kick: return "#FF8888";
-        case MessageType::Mode: return "#8888FF";
-        case MessageType::Topic: return "#8888FF";
-        case MessageType::TopicSet: return "#8888FF";
-        case MessageType::Error: return "#FF0000";
-        case MessageType::Notice: return "#AAAAAA";
-        default: return {};
-        }
-        break;
-    default:
-        return {};
+case Qt::DisplayRole:
+         return msg.coloredText();
+     case TypeRole:
+         return static_cast<int>(msg.type());
+     case ColorRole:
+         return msg.coloredText();
+     default:
+         return {};
     }
 }
 
@@ -83,17 +69,15 @@ void IRCUserModel::setUsers(const QList<IRCUser>& users) {
 }
 
 void IRCUserModel::addUser(const IRCUser& user) {
-    // Check for duplicates
     for (const auto& u : m_users) {
-        if (u.nick() == user.nick()) {
+        if (u.nick().toUpper() == user.nick().toUpper()) {
             return;
         }
     }
 
-    // Insert in sorted position
     int row = 0;
     for (; row < m_users.size(); ++row) {
-        if (user < m_users[row]) {
+        if (user.nick().toUpper() < m_users[row].nick().toUpper()) {
             break;
         }
     }
@@ -105,7 +89,7 @@ void IRCUserModel::addUser(const IRCUser& user) {
 
 void IRCUserModel::removeUser(const QString& nick) {
     for (int i = 0; i < m_users.size(); ++i) {
-        if (m_users[i].nick() == nick) {
+        if (m_users[i].nick().toUpper() == nick.toUpper()) {
             beginRemoveRows(QModelIndex(), i, i);
             m_users.removeAt(i);
             endRemoveRows();
@@ -133,13 +117,9 @@ QVariant IRCUserModel::data(const QModelIndex& index, int role) const {
     const auto& user = m_users[index.row()];
 
     switch (role) {
-    case Qt::DisplayRole: {
-        QString mode;
-        if (!user.userPrefix().isEmpty()) {
-            mode = user.userPrefix().front();
-        }
-        return QString("%1%2").arg(mode).arg(user.nick());
-    }
+case Qt::DisplayRole: {
+         return QString("%1%2").arg(user.userPrefix()).arg(user.nick());
+     }
     case NickRole:
         return user.nick();
     default:
@@ -161,9 +141,9 @@ void IRCChannelModel::addChannel(const QString& name) {
         }
     }
 
-    beginResetModel();
+    beginInsertRows(QModelIndex(), m_channels.size(), m_channels.size());
     m_channels.append(name);
-    endResetModel();
+    endInsertRows();
 }
 
 void IRCChannelModel::removeChannel(const QString& name) {
@@ -184,6 +164,7 @@ void IRCChannelModel::clear() {
 
 void IRCChannelModel::setCurrentChannel(const QString& name) {
     m_currentChannel = name;
+    if (m_channels.isEmpty()) return;
     emit dataChanged(index(0, 0), index(m_channels.size() - 1, 0));
 }
 

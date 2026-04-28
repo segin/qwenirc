@@ -1,5 +1,5 @@
-#ifndef IRCMODELMANAGER_H
-#define IRCMODELMANAGER_H
+#ifndef IRCMODELS_H
+#define IRCMODELS_H
 
 #include "IRCMessage.h"
 #include "IRCUser.h"
@@ -29,7 +29,7 @@ public:
 
     Q_ENUM(IRCMessageRoles)
 
-    QList<IRCMessage> messages() const { return m_messages; }
+    const QList<IRCMessage>& messages() const { return m_messages; }
 
     static const int MAX_MESSAGES = 10000;
 
@@ -57,7 +57,7 @@ public:
 
     Q_ENUM(IRCUserRoles)
 
-    QList<IRCUser> users() const { return m_users; }
+    const QList<IRCUser>& users() const { return m_users; }
 
 protected:
     QList<IRCUser> m_users;
@@ -84,12 +84,12 @@ public:
 
     Q_ENUM(IRCChannelRoles)
 
-    QStringList channels() const { return m_channels; }
-    QString currentChannel() const { return m_currentChannel; }
+    QStringList& channels() { return m_channels; }
+    const QString& currentChannel() const { return m_currentChannel; }
 
 protected:
     QStringList m_channels;
     QString m_currentChannel;
 };
 
-#endif // IRCMODELMANAGER_H
+#endif // IRCMODELS_H

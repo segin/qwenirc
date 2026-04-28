@@ -40,9 +40,12 @@ QString IRCMessage::formattedText() const {
     case MessageType::Error:
         result = QString("ERROR: %1").arg(m_text);
         break;
-    case MessageType::Notice:
-        result = QString("[Notice from %1] %2").arg(m_sender).arg(m_text);
-        break;
+case MessageType::Notice:
+         result = QString("[Notice from %1] %2").arg(m_sender).arg(m_text);
+         break;
+    case MessageType::System:
+         result = m_text;
+         break;
     }
 
     return result;
@@ -86,9 +89,12 @@ QString IRCMessage::coloredText() const {
     case MessageType::Error:
         formatted += timestampStr + QString("<span style=\"color: #FF0000;\">%1</span>").arg(escapeHTML(formattedText()));
         break;
-    case MessageType::Notice:
-        formatted += timestampStr + QString("<span style=\"color: #AAAAAA;\">%1</span>").arg(escapeHTML(formattedText()));
-        break;
+case MessageType::Notice:
+         formatted += timestampStr + QString("<span style=\"color: #AAAAAA;\">%1</span>").arg(escapeHTML(formattedText()));
+         break;
+    case MessageType::System:
+         formatted += timestampStr + QString("<span style=\"color: #888888;\">%1</span>").arg(escapeHTML(formattedText()));
+         break;
     }
 
     return formatted;
