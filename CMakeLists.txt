@@ -4,6 +4,7 @@ project(QwenIRC
     LANGUAGES CXX
 )
 
+set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
@@ -11,6 +12,17 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets Network)
+
+find_package(OpenSSL QUIET)
+option(QWENIRC_TLS "Build with IRC TLS support (requires OpenSSL)" ON)
+if(QWENIRC_TLS)
+    if(OpenSSL_FOUND)
+        set(HAVE_TLS ON)
+    else()
+        message(STATUS "QWENIRC_TLS enabled but OpenSSL not found; TLS disabled")
+        set(HAVE_TLS OFF)
+    endif()
+endif()
 
 add_executable(qwenirc
     src/main.cpp
@@ -46,6 +58,21 @@ target_link_libraries(qwenirc PRIVATE
     Qt6::Network
 )
 
-target_compile_options(qwenirc PRIVATE -Wall -Wextra)
+if(HAVE_TLS)
+    target_link_libraries(qwenirc PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+endif()
 
-install(TARGETS qwenirc BUNDLE DESTINATION .)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    option(QWENIRC_WALL "Enable -Wall -Wextra warnings" ON)
+    if(QWENIRC_WALL)
+        target_compile_options(qwenirc PRIVATE -Wall -Wextra)
+        if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+            target_compile_options(qwenirc PRIVATE -Werror)
+        endif()
+    endif()
+endif()
+
+install(TARGETS qwenirc
+    RUNTIME DESTINATION bin
+    BUNDLE DESTINATION .
+)

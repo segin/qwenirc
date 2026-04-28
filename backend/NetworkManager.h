@@ -4,7 +4,9 @@
 #include "IRCChannel.h"
 #include "IRCUser.h"
 #include "IRCMessage.h"
+#include <QSet>
 #include <QTcpSocket>
+#include <QSslSocket>
 #include <QTimer>
 #include <QMap>
 #include <QStringList>
@@ -24,9 +26,9 @@ public:
     explicit NetworkManager(QObject* parent = nullptr);
     ~NetworkManager() override;
 
-    void connectToServer(const QString& host, quint16 port,
-                         const QString& nick, const QString& pass = {},
-                         const QString& channel = {});
+  void connectToServer(const QString& host, quint16 port,
+                          const QString& nick, const QString& pass = {},
+                          const QString& channel = {}, bool useTLS = false);
     void disconnect();
     void sendMessage(const QString& channel, const QString& message);
     void joinChannel(const QString& channel);
@@ -76,6 +78,7 @@ signals:
     void whoisDone(const QString& nick);
     void ctcpRequest(const QString& nick, const QString& command, const QString& text);
     void ctcpReply(const QString& nick, const QString& command, const QString& text);
+    void queryTabNeeded(const QString& nick);
 
 private slots:
     void onConnected();
@@ -105,7 +108,7 @@ private:
     bool isCtcpMessage(const QString& message);
     void parseCtcpMessage(const QString& message, QString& command, QString& text);
 
-    QTcpSocket* m_socket;
+    QAbstractSocket* m_socket;
     QString m_host;
     quint16 m_port;
     QString m_nick;
@@ -118,7 +121,10 @@ private:
     QString m_realname;
     QTimer* m_pingTimer;
     QStringList m_capSupported;
+    QSet<QString> m_activeCaps;
     QByteArray m_lineBuffer;
+    int m_nickRetries = 0;
+    bool m_waitingCaps = false;
 };
 
 #endif // NETWORKMANAGER_H

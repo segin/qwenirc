@@ -2,3 +2,9 @@ build/
 *.o
 *.moc
 *.o.d
+compile_commands.json
+.cache/
+.vscode/
+.idea/
+*.user
+CMakeLists.txt.user
