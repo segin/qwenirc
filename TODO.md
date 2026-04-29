@@ -224,7 +224,7 @@ Status: `[ ]` open · `[x]` done
 **Test requirements:**
 - Verify `onReadyRead()` processes data when called directly (not via signal).
 
-- [ ] Replace `QTcpSocket* socket = qobject_cast<QTcpSocket*>(sender()); if (!socket) return;` and all `socket->` accesses with `m_socket->`.
+- [x] Replace `QTcpSocket* socket = qobject_cast<QTcpSocket*>(sender()); if (!socket) return;` and all `socket->` accesses with `m_socket->`.
 
 ---
 

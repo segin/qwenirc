@@ -213,10 +213,7 @@ void NetworkManager::onDisconnected() {
 }
 
 void NetworkManager::onReadyRead() {
-    QTcpSocket* socket = qobject_cast<QTcpSocket*>(sender());
-    if (!socket) return;
-
-    QByteArray data = socket->readAll();
+    QByteArray data = m_socket->readAll();
     m_lineBuffer += data;
 
     const int MAX_BUFFER_SIZE = 10 * 1024 * 1024;
