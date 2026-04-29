@@ -305,8 +305,8 @@ Status: `[ ]` open · `[x]` done
 **Test requirements:**
 - Given `CAP * ACK :sasl=PLAIN echo-message`, verify `m_activeCaps.contains("sasl")` and `m_activeCaps.contains("echo-message")` are both true.
 
-- [ ] For each cap token in the ACK list, strip everything from `=` onwards before inserting.
-- [ ] Also handle `-` prefix (cap disable): if cap starts with `-`, remove it from `m_activeCaps`.
+- [x] For each cap token in the ACK list, strip everything from `=` onwards before inserting.
+- [x] Also handle `-` prefix (cap disable): if cap starts with `-`, remove it from `m_activeCaps`.
 
 ---
 

@@ -729,12 +729,17 @@ void NetworkManager::handleCapCommand(const QStringList& params) {
         QStringList caps = params.mid(2);
         for (const auto& cap : caps) {
             QString capName = cap;
-            if (capName.endsWith(':')) {
-                capName = capName.left(capName.size() - 1);
-            } else if (capName.startsWith('-')) {
+            if (capName.startsWith('-')) {
                 capName = capName.mid(1);
                 m_activeCaps.remove(capName);
                 continue;
+            }
+            if (capName.endsWith(':')) {
+                capName = capName.left(capName.size() - 1);
+            }
+            int eqPos = capName.indexOf('=');
+            if (eqPos >= 0) {
+                capName = capName.left(eqPos);
             }
             m_activeCaps.insert(capName);
         }
