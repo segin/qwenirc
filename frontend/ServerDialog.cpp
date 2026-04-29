@@ -60,6 +60,9 @@ ServerDialog::ServerDialog(QWidget* parent)
 
     m_portEdit->setValidator(new QIntValidator(1, 65535, this));
 
+    m_channelEdit->setValidator(new QRegularExpressionValidator(
+        QRegularExpression("^#?[a-zA-Z0-9_.,\\-]+(,#?[a-zA-Z0-9_.,\\-]+)*$|^$"), this));
+
     // Load saved connection settings
     QSettings settings("QwenIRC", "Connection");
     m_hostEdit->setText(settings.value("host", "irc.libera.chat").toString());

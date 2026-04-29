@@ -6,7 +6,9 @@
 #include <QGridLayout>
 #include <QPushButton>
 #include <QIntValidator>
+#include <QRegularExpression>
 #include <QCheckBox>
+#include <QRegularExpressionValidator>
 
 class ServerDialog : public QDialog {
     Q_OBJECT

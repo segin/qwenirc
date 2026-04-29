@@ -532,7 +532,7 @@ Already covered under REQ-MODE-02.
 
 **EARS:** When validating channel names, the system shall allow any character that IRC permits in channel names, not just `\w` (word chars).
 
-- [ ] Replace or relax the `QRegularExpressionValidator` to accept `-`, `.`, and other common channel name characters, or remove the validator and rely on server rejection.
+  - [x] Replaced with relaxed `QRegularExpressionValidator` accepting `-`, `.`, `_`, `,` and other common IRC channel name characters.
 
 ---
 
