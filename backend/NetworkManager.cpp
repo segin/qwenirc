@@ -874,6 +874,9 @@ void NetworkManager::handleNumericReply(const QString& numeric, [[maybe_unused]]
     } else if (num == 5) {
         for (int i = 1; i < params.size(); ++i) {
             QString token = params[i];
+            if (token.startsWith(':')) {
+                continue;
+            }
             if (token.contains('=')) {
                 int eqPos = token.indexOf('=');
                 QString key = token.left(eqPos);

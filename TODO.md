@@ -382,8 +382,8 @@ Status: `[ ]` open · `[x]` done
 **Test requirements:**
 - Given `:srv 005 me CHANTYPES=# CASEMAPPING=rfc1459 :are supported`, verify `m_isupport["CHANTYPES"] == "#"`.
 
-- [ ] Change `for (int i = 2; i < params.size(); ++i)` to `for (int i = 1; i < params.size(); ++i)`.
-- [ ] Skip the trailing `:are supported by this server` token by checking `token.startsWith(':')` or by not processing the last param if it starts with `:`.
+- [x] Change `for (int i = 2; i < params.size(); ++i)` to `for (int i = 1; i < params.size(); ++i)`.
+- [x] Skip the trailing `:are supported by this server` token by checking `token.startsWith(':')`.
 
 ---
 
