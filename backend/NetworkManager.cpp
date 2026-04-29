@@ -94,6 +94,7 @@ void NetworkManager::sendUserInput(const QString& context, const QString& text) 
             sendCommand("QUIT", QStringList() << (parts.size() >= 2 ? parts.mid(1).join(' ') : "Leaving"));
         } else if (cmd == "MSG" && parts.size() >= 3) {
             sendMessage(parts[1], parts.mid(2).join(' '));
+            emit queryTabNeeded(parts[1]);
         } else if (cmd == "QUOTE" || cmd == "RAW") {
             if (parts.size() >= 2) sendRaw(parts.mid(1).join(' ') + "\r\n");
         } else if (cmd == "TOPIC") {
@@ -482,7 +483,7 @@ void NetworkManager::handleNotice(const QString& prefix, const QStringList& para
         msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate));
     }
 
-    if (target.startsWith((m_isupport["CHANTYPES"].isEmpty() ? '#' : m_isupport["CHANTYPES"].front().toLatin1()) ) && (m_channels.contains(target) || channel(target))) {
+    if (target.startsWith((m_isupport["CHANTYPES"].isEmpty() ? '#' : m_isupport["CHANTYPES"].front().toLatin1()) ) && channel(target)) {
         emit channelMessage(target, msg);
     } else {
         emit channelMessage(sender, msg);
@@ -529,6 +530,16 @@ void NetworkManager::handleJoin(const QString& prefix, const QStringList& params
     }
 
     IRCUser user(nick);
+    {
+        QString ident = prefix.section('!', 1, 1).section('@', 0, 0);
+        QString host = prefix.section('@', 1);
+        if (!ident.isEmpty()) {
+            user.setIdent(ident);
+        }
+        if (!host.isEmpty()) {
+            user.setHost(host);
+        }
+    }
 
     IRCMessage msg(MessageType::Join, chanName, nick);
     if (!serverTime.isEmpty()) {
