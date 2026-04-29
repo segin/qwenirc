@@ -1,493 +1,578 @@
-# QwenIRC — TODO / Requirements Checklist
+# QwenIRC — Requirements & Task Checklist
 
-Requirements are written in EARS (Easy Approach to Requirements Syntax) format.
-Each item includes a user story and links to the audit finding.
+Requirements use EARS notation:
+- **Ubiquitous:** The [system] shall [action]
+- **Event-driven:** When [trigger], the [system] shall [action]
+- **State-driven:** While [state], the [system] shall [action]
+- **Unwanted:** If [condition], the [system] shall [action]
 
-Legend: `[ ]` = open · `[x]` = done · priority **P1** (critical) → **P4** (low)
-
----
-
-## 1. IRC Protocol Correctness
-
-### 1.1 CAP Negotiation
-
-**REQ-CAP-01** · P1
-> When the TCP connection is established, the system shall send `CAP LS 302` before sending `NICK` or `USER`, and shall not send `NICK`/`USER` until `CAP END` has been issued.
-
-*User story:* As a user, I want the client to complete capability negotiation before registering, so that the server does not reject or ignore capability requests.
-
-- [ ] Move `NICK`/`USER` to after `CAP END` in `NetworkManager::onConnected`
-- [ ] Populate `m_capSupported` with at least `["sasl", "server-time", "echo-message", "multi-prefix", "away-notify", "account-notify"]`
-- [ ] Parse the server's `CAP LS` token list and intersect with supported caps before sending `CAP REQ`
-- [ ] Fix `handleCapCommand` LS branch — current loop captures cap names and discards them
-
-**REQ-CAP-02** · P2
-> When the server sends `CAP ACK`, the system shall enable each acknowledged capability and then send `CAP END`.
-
-- [ ] Track acknowledged caps in a `QSet<QString> m_activeCaps`
-- [ ] Activate `echo-message` flag to suppress local echo in `sendUserInput`
+Priority: **P1** critical → **P4** low  
+Status: `[ ]` open · `[x]` done
 
 ---
 
-### 1.2 Numeric Reply Parameter Indexing
+## 1. CRITICAL — Client Cannot Connect
 
-**REQ-NUM-01** · P1
-> The system shall parse all numeric reply parameters with the understanding that parameter 0 is the recipient nick, and data begins at parameter 1 (or later), as specified in RFC 2812 §5.
+### REQ-CAP-01 · P1 — CAP LS capability list must be split before intersection
 
-*User story:* As a user, I want channel topics, mode strings, ban lists, and error messages to display correctly, so that I have accurate information about channel state.
+**EARS:** When the server sends a `CAP LS` reply, the system shall split the trailing parameter on spaces before intersecting with the locally supported capability list.
 
-- [x] Fix 324 RPL_CHANNELMODEIS: channel = `params[0]`, mode = `params[1]`
-- [x] Fix 332 RPL_TOPIC: channel = `params[0]`, topic = `params[1]`
-- [x] Fix 333 RPL_TOPICWHOTIME: channel = `params[0]`, setter = `params[2]`, ts = `params[1]`
-- [x] Fix 329 RPL_CREATIONTIME: channel = `params[0]`, ts = `params[1]`
-- [x] Fix 367 RPL_BANLIST: indexing corrected
-- [x] Fix 368 RPL_ENDOFBANLIST: indexing corrected
-- [x] Fix 401 ERR_NOSUCHNICK: missing nick = `params[1]`
-- [x] Fix 331 RPL_NOTOPIC: channel = `params[0]`
-- [x] Fix 315 RPL_ENDOFWHO: does not emit `namesComplete` — this is end-of-WHO
-- [x] Fix error range 421-499: extract message from `params[1]`
-- [x] Fix 433 retry limit (> 3, not >= 3; resets after error)
-- [x] Add 005 ISUPPORT parsing (stores CHANTYPES, PREFIX, NETWORK, CASEMAPPING in `m_isupport`)
-- [x] Use `m_isupport["CHANTYPES"]` for channel-name detection instead of hardcoded `'#'`
+**User story:** As a user, I want IRCv3 capabilities to be negotiated on every connection so that server-time, echo-message, and other features work correctly.
+
+**Root cause:** `params.mid(2)` yields a one-element list containing the entire space-separated cap string. `availableCaps.insert("sasl server-time …")` inserts one composite key. Intersection with individual cap names in `m_capSupported` always produces an empty set, so `CAP END` is sent immediately with nothing requested.  
+**File:** `NetworkManager.cpp:684-709`
+
+**Test requirements:**
+- Given a simulated `CAP * LS :sasl server-time echo-message multi-prefix`, verify `m_activeCaps` contains individual entries after ACK.
+- Verify `CAP REQ :server-time echo-message` (or subset) is sent, not `CAP REQ :` with empty list.
+- Verify no request is sent for caps the server did not advertise.
+
+- [ ] In `handleCapCommand` LS branch, collect caps from `params.mid(2)`, then for each element call `.split(' ', Qt::SkipEmptyParts)` to get individual cap names before inserting into `availableCaps`.
+- [ ] Handle multiline CAP LS (`*` indicator at params[2]): accumulate caps across multiple LS responses; send REQ only when the non-`*` final LS arrives.
 
 ---
 
-### 1.3 PRIVMSG / NOTICE Routing
+### REQ-CAP-02 · P1 — NICK/USER registration must follow CAP END, not server CAP END echo
 
-**REQ-MSG-01** · P1
-> When a `PRIVMSG` is received whose target is the client's own nickname, the system shall route the message to a query tab named after the sending user, creating the tab if it does not exist.
+**EARS:** When the client sends `CAP END`, the system shall immediately send `NICK` and `USER` registration commands.
 
-*User story:* As a user, I want private messages to open in a dedicated query tab automatically, so that I do not miss incoming PMs.
+**User story:** As a user, I want the client to complete IRC registration after capability negotiation so that I can actually join and chat.
 
-- [ ] Wire `handlePrivMsg` to call `MainWindow::addQueryTab` when `targetNick == m_nick`
-- [ ] Add a `queryTabNeeded(const QString& nick)` signal to `NetworkManager`
-- [ ] Connect `queryTabNeeded` → `MainWindow::addQueryTab` in `MainWindow::initializeUI`
-- [ ] Apply same fix to ACTION CTCP when private (target is own nick → route to sender's query tab)
+**Root cause:** Registration logic sits in `else if (action == "END")` which handles a server-originated `CAP END`. Servers never send `CAP END`; only clients do. NICK/USER are therefore never sent. The client stalls permanently after the TLS/TCP handshake.  
+**File:** `NetworkManager.cpp:710-733`
 
-**REQ-MSG-02** · P2
-> When a `NOTICE` is received whose target is the client's own nickname, the system shall route it to a query tab named after the sender, creating the tab if it does not exist.
+**Test requirements:**
+- Given a simulated server that sends `CAP * LS :` (no caps), verify NICK and USER are sent after client sends `CAP END`.
+- Given a server that sends `CAP * ACK :echo-message`, verify NICK and USER are sent after the ACK is processed.
+- Verify NICK is sent before USER.
+- Verify PASS is sent before NICK when a password is set.
 
-- [ ] Apply the same PM-routing fix to `handleNotice`
-
-**REQ-MSG-03** · P2
-> While the `echo-message` capability is active, the system shall not emit a local echo in `sendUserInput` for channel messages.
-
-- [ ] Guard the local echo block in `sendUserInput` with `!m_activeCaps.contains("echo-message")`
-
----
-
-### 1.4 CTCP
-
-**REQ-CTCP-01** · P2
-> When a CTCP VERSION request is received, the system shall send a CTCP VERSION reply via `NOTICE` to the *requesting user's nick*, not to the channel or the client's own nick.
-
-*User story:* As a user, I want CTCP replies to be routed correctly, so that other clients receive version information.
-
-- [ ] Change `sendCtcpVersionReply(chanName)` → `sendCtcpVersionReply(senderNick)` in `handlePrivMsg` and `handleNotice`
-
-**REQ-CTCP-02** · P2
-> The system shall send a CTCP ACTION (`/me`) command when the user types `/me <text>` in a channel or query tab.
-
-*User story:* As a user, I want to use `/me` to send action messages, so that I can express actions in IRC conversation.
-
-- [ ] Add `/me` handler in `sendUserInput`: send `PRIVMSG <context> :\001ACTION <text>\001`
+- [ ] Move PASS + NICK + USER + `m_pingTimer->start()` into a private `void sendRegistration()` method.
+- [ ] Call `sendRegistration()` at the end of the ACK handler (after storing caps and sending `CAP END`).
+- [ ] Call `sendRegistration()` in the no-caps branch of the LS handler (after sending `CAP END`).
+- [ ] Call `sendRegistration()` in the NAK handler (after sending `CAP END`).
+- [ ] Delete the dead `else if (action == "END")` branch.
 
 ---
 
-### 1.5 NICK and QUIT Propagation
+### REQ-BUILD-01 · P1 — OpenSSL CMake variable must use correct capitalisation
 
-**REQ-NICK-01** · P2
-> When a `NICK` message is received, the system shall emit a nick-change notification only to tabs for channels in which the renaming user is currently a member.
+**EARS:** When `find_package(OpenSSL)` succeeds, the system shall link `OpenSSL::SSL` and `OpenSSL::Crypto` into the qwenirc target.
 
-*User story:* As a user, I want nick-change messages to appear only in relevant channel tabs, so that unrelated tabs are not cluttered.
+**User story:** As a user, I want the TLS option to be compiled in when OpenSSL is present so that I can connect to servers requiring encrypted connections.
 
-- [ ] In `handleNick`, check `ch->findUser(oldNick) != nullptr` before emitting to that channel
-- [ ] Update the user's entry in each `IRCChannel::m_users` list
-- [ ] Update `IRCUserModel` in the corresponding `ChannelTab` (add `userNickChanged` signal or call removeUser/addUser)
+**Root cause:** `find_package(OpenSSL)` sets `OPENSSL_FOUND`; the CMake condition checks `OpenSSL_FOUND` (mixed case). The condition is always false; OpenSSL is never linked; `QSslSocket` operations silently fail at runtime.  
+**File:** `CMakeLists.txt:19`
 
-**REQ-QUIT-01** · P2
-> When a `QUIT` message is received, the system shall emit a quit notification to every channel the quitting user was a member of, remove the user from each channel's user list, and not emit to channels where the user was not present.
+**Test requirements:**
+- On a system with OpenSSL installed, verify CMake configure output does NOT print "OpenSSL not found".
+- Verify `cmake --build build` links against `libssl` and `libcrypto` (`ldd build/qwenirc | grep ssl`).
 
-*User story:* As a user, I want quit messages to appear only where that user was, and the user list to reflect their departure, so that the list stays accurate.
-
-- [ ] In `handleQuit`, iterate `m_channels`, check membership, emit and remove only where user was present
-- [ ] Emit `userLeft` per channel (not just `m_currentChannel`)
+- [x] Change `if(OpenSSL_FOUND)` to `if(OPENSSL_FOUND)`.
 
 ---
 
-### 1.6 KICK
+## 2. HIGH — Functional Bugs
 
-**REQ-KICK-01** · P2
-> When a `KICK` message is received, the system shall display which user was kicked, by whom, and the reason; the `IRCMessage` sender field shall be the kicker's nick.
+### REQ-NUM-01 · P1 — Numeric reply params must be indexed from position 1, not 0
 
-- [ ] Fix `handleKick`: set sender to `kicker`, include `kicked` and `reason` in the message text
+**EARS:** When a numeric server reply is received, the system shall parse channel names from `params[1]` and data from `params[2]` onwards, treating `params[0]` as the recipient nickname per RFC 2812 §5.
 
----
+**User story:** As a user, I want channel topics, mode strings, ban lists, and user lists to display correctly so that I have accurate information about channel state.
 
-### 1.7 MODE
+**Root cause:** The Qwen pass applied partial fixes that still read `params[0]` as the channel name. `params[0]` is always the recipient nick. All affected handlers remain broken.  
+**File:** `NetworkManager.cpp:741-865`
 
-**REQ-MODE-01** · P2
-> When a `MODE` message is received with parameters, the system shall store per-user mode changes (op, voice, etc.) against the correct user in the channel's user list, using the parameter list to identify the target user.
+**Test requirements (per numeric):**
+- 353: Given `:srv 353 me = #chan :@op +voice user`, verify channel = `#chan` and user list contains `op`, `voice`, `user` with correct prefixes.
+- 366: Given `:srv 366 me #chan :End`, verify `namesComplete("#chan")` is emitted.
+- 332: Given `:srv 332 me #chan :the topic`, verify `channelTopic("#chan", "the topic")` is emitted.
+- 324: Given `:srv 324 me #chan +ns`, verify `channelMode("#chan", "+ns")` is emitted.
+- 333: Given `:srv 333 me #chan setter 1234`, verify setter and timestamp are read correctly.
+- 005: Given `:srv 005 me CHANTYPES=# CASEMAPPING=rfc1459 :supported`, verify both tokens are stored in `m_isupport`.
 
-*User story:* As a user, I want user mode prefixes (`@`, `+`) in the user list to update correctly when ops are set or removed, so that I can see who has privileges.
-
-- [ ] Rewrite `IRCChannel::applyMode(modeStr, params)` to accept the full parameter list
-- [ ] Parse mode string character-by-character consuming params for user/address modes
-- [ ] Update matching `IRCUser::setMode` and reflect change in `IRCUserModel`
-
----
-
-### 1.8 NAMES Reply
-
-**REQ-NAMES-01** · P2
-> When a 353 RPL_NAMREPLY is received, the system shall preserve prefix characters (`@`, `+`, `~`, `%`, `&`) on user display in the user list.
-
-*User story:* As a user, I want to see operator and voice prefixes next to nicks in the user list, so that I can identify privileged users at a glance.
-
-- [ ] `onNamesReceived` currently adds only `user.nick()` to `m_userList` without prefix — include mode prefix
+- [ ] **353 RPL_NAMREPLY:** `channel = params.value(2)`, `users = params.value(3)`.
+- [ ] **366 RPL_ENDOFNAMES:** `channel = params.value(1)`.
+- [ ] **332 RPL_TOPIC:** `channel = params.value(1)`, `topic = params.value(2)`.
+- [ ] **324 RPL_CHANNELMODEIS:** `channel = params.value(1)`, `mode = params.value(2)`.
+- [ ] **333 RPL_TOPICWHOTIME:** `channel = params.value(1)`, `setter = params.value(2)`, `ts = params.value(3)`.
+- [ ] **329 RPL_CREATIONTIME:** `channel = params.value(1)`, `ts = params.value(2)`.
+- [ ] **331 RPL_NOTOPIC:** `channel = params.value(1)`.
+- [ ] **367/368 ban list:** shift all indices by +1.
+- [ ] **005 ISUPPORT:** start loop at `i = 1`, not `i = 2`.
 
 ---
 
-### 1.9 433 Nick In Use
+### REQ-MODE-01 · P1 — `IRCChannel::applyMode` must parse mode strings correctly
 
-**REQ-433-01** · P3
-> When a 433 ERR_NICKNAMEINUSE reply is received, the system shall attempt at most 3 alternative nicks, then present the user with an error dialog.
+**EARS:** When a MODE message is received for a channel, the system shall parse each mode character in sequence, tracking the add/remove state with `+`/`-` prefix characters, and shall apply user mode changes to the correct channel member using the corresponding parameter.
 
-- [ ] Add `int m_nickRetries` counter; after 3 attempts, emit `serverError` and stop
+**User story:** As a user, I want `@` and `+` prefixes in the user list to update when ops or voice are set or removed so that I can identify privileged users.
 
----
+**Root cause:** The current loop checks `if (isAdd || c == '-')` where `c` is the current character. This condition is only true when `c` is `+` or `-`. When `c` is a mode letter like `o`, the condition is false and the inner body never runs. No user mode is ever changed.  
+**File:** `IRCChannel.cpp:56-81`
 
-### 1.10 IRC Line Parsing
+**Test requirements:**
+- Given `applyMode("+o", ["nick1"], "setter")`, verify `findUser("nick1")->userPrefix() == "@"`.
+- Given `applyMode("+v", ["nick2"], "setter")`, verify prefix is `"+"`.
+- Given `applyMode("-o", ["nick1"], "setter")` after granting op, verify prefix is cleared.
+- Given `applyMode("+ov", ["nick1", "nick2"], "setter")`, verify both users updated.
+- Given `applyMode("+mb", ["key", "ban!mask"], "setter")`, verify no crash and no user prefix change.
 
-**REQ-PARSE-01** · P2
-> When a received line contains a leading `\r`, the system shall strip the `\r` character, not replace it with a space.
-
-- [x] Changed `line.replace('\r', QChar(' '))` → `line.remove('\r')`
-
-**REQ-PARSE-02** · P2
-> When a received line contains IRCv3 message tags (prefixed with `@`), the system shall parse and store relevant tag values (`server-time`, `account`, `msgid`) before dispatching the message.
-
-*User story:* As a user, I want messages to display their original server timestamp (from `server-time` tag) when available, so that the time shown matches when the message was actually sent.
-
-- [x] Parse `server-time` tag and set `IRCMessage::m_timestamp` from it
-- [x] Added `IRCMessage::setTimestamp(const QDateTime&)` setter
-
-**REQ-PARSE-03** · P2
-> When the receive buffer overflows, the system shall discard the oldest data, preserving the most recent.
-
-- [x] Changed `m_lineBuffer.truncate(MAX_BUFFER_SIZE / 2)` → `m_lineBuffer.right(m_lineBuffer.size() / 2)` — keeps newest half, not first half
-
-**REQ-PARSE-04** · P3
-> The system shall decode incoming bytes using UTF-8, and fall back to Latin-1 for sequences that are not valid UTF-8.
-
-- [x] Attempts `QString::fromUtf8(rawLine)` first; if replacement chars (U+FFFD) appear, falls back to `QString::fromLatin1(rawLine)`
+- [ ] Rewrite the loop with a separate `bool adding = true` tracking variable:
+  ```
+  for each char c in modeStr:
+      if c == '+': adding = true; continue
+      if c == '-': adding = false; continue
+      // c is a mode letter — consume param if applicable
+  ```
+- [ ] Map mode letter to prefix symbol using `m_isupport["PREFIX"]` (default `(ohv)@%+`); parse the `(letters)symbols` format to build the mapping.
+- [ ] Set `user->setUserPrefix(adding ? symbol : "")` where `symbol` is looked up from the mapping.
+- [ ] For non-user modes that take a param (`k`, `l`, `b`, `e`, `I`), consume but discard the param.
 
 ---
 
-### 1.11 PING/PONG Keep-alive
+### REQ-TLS-01 · P1 — TLS selection must be forwarded from dialog to network layer
 
-**REQ-PING-01** · P3
-> While connected, the system shall detect server silence exceeding 4 minutes and emit a disconnection event.
+**EARS:** When the user enables the TLS checkbox and clicks Connect, the system shall pass `useTLS = true` to `NetworkManager::connectToServer`.
 
-*User story:* As a user, I want the client to detect dead connections automatically, so that I am not left staring at a frozen chat.
+**User story:** As a user, I want my TLS checkbox selection to actually enable encrypted connections so that my password and messages are protected.
 
-- [ ] Start a `m_pongTimer` (4 min) on each PING sent; reset it on any incoming data; fire `serverError` + `disconnectFromHost()` on timeout
+**Root cause:** `ServerDialog::connectRequested` emits 6 parameters including `bool useTLS`. `MainWindow::onConnect` is declared with only 5 parameters — `useTLS` is silently dropped by Qt's connection mechanism. `connectToServer` is always called with implicit `useTLS = false`.  
+**Files:** `MainWindow.h:28-30`, `MainWindow.cpp:333-337`
 
----
+**Test requirements:**
+- Verify selecting the TLS checkbox and connecting results in `QSslSocket::connectToHostEncrypted` being called, not `QTcpSocket::connectToHost`.
+- Verify port defaults to 6697 when TLS is checked (UX improvement, not blocking).
 
-### 1.12 Channel Prefix / ISUPPORT
-
-**REQ-005-01** · P3
-> When a 005 RPL_ISUPPORT reply is received, the system shall parse and store `CHANTYPES`, `PREFIX`, `CASEMAPPING`, and `NETWORK` tokens.
-
-*User story:* As a user, I want the client to respect server-specific channel types and nick prefixes, so that non-standard networks work correctly.
-
-- [x] Parse `005` params into `QMap<QString, QString> m_isupport` (extracts key=value tokens)
-- [x] Use `m_isupport["CHANTYPES"]` for channel-name detection in `sendUserInput`, `handleNotice`, and `handleNamesReceived`
-- [ ] Use `PREFIX` for parsing NAMES mode chars in RPL_NAMREPLY
+- [ ] Add `bool useTLS` parameter to `MainWindow::onConnect` slot declaration in `MainWindow.h`.
+- [ ] Update `MainWindow::onConnect` body to pass `useTLS` to `m_network->connectToServer(...)`.
 
 ---
 
-### 1.13 CAP — Empty CAP REQ
+### REQ-NICK-01 · P2 — Nick changes must update IRCChannel user lists
 
-**REQ-CAP-03** · P1
-> The system shall not send a `CAP REQ` with an empty capability list.
+**EARS:** When a `NICK` message is received, the system shall update the user entry in every channel where that user is a member, replacing the old nick with the new nick.
 
-- [ ] Guard `CAP REQ` in `onConnected` — send only if cap list is non-empty
+**User story:** As a user, I want the user list to show current nicks after a rename so that I can correctly address channel members.
 
----
+**Root cause:** `handleNick` scopes message delivery correctly (only to channels where the user is present) but never calls `ch->removeUser(oldNick)` or `ch->addUser(IRCUser(newNick))`. The channel's internal user list retains the old nick indefinitely.  
+**File:** `NetworkManager.cpp:523-528`
 
-## 2. Security
+**Test requirements:**
+- After a NICK from `alice` to `alice_`, verify `IRCChannel::findUser("alice")` returns nullptr.
+- Verify `IRCChannel::findUser("alice_")` returns a valid user.
+- Verify `userChangedNick` signal is still emitted once.
 
-### 2.1 TLS
-
-**REQ-TLS-01** · P1
-> Where the user selects a port ≥ 6697 or enables a TLS toggle, the system shall use `QSslSocket` for the connection.
-
-*User story:* As a user, I want to connect to IRC over TLS, so that my password and messages are encrypted in transit.
-
-- [ ] Replace `QTcpSocket` with `QSslSocket` in `NetworkManager`
-- [ ] Add a TLS checkbox to `ServerDialog`
-- [ ] Save TLS preference in `QSettings`
-
-### 2.2 HTML Injection
-
-**REQ-SEC-01** · P1
-> The system shall HTML-escape all user-controlled strings (sender nick, message text, topic) before inserting them into HTML-formatted chat output.
-
-*User story:* As a user, I want my chat display to not be hijacked by maliciously crafted nicks or messages, so that the UI renders safely.
-
-- [ ] Apply `IRCMessage::escapeHTML()` (or `QString::toHtmlEscaped()`) to `m_sender` in `coloredText()`
-- [ ] Apply HTML-escaping to all strings passed to `formattedText()` before embedding in `<span>` tags
-- [ ] Replace hand-rolled `escapeHTML` with Qt's built-in `QString::toHtmlEscaped()`
-
-### 2.3 Password Handling
-
-**REQ-SEC-02** · P3
-> The system shall not store the server password in `QSettings`.
-
-- [ ] Confirm password is already excluded from settings save (it is — but document this intent)
+- [ ] Inside the `handleNick` channel loop, after the `findUser` check: copy the old user's ident/host, call `ch->removeUser(oldNick)`, construct `IRCUser(newNick, ident, host)` and call `ch->addUser(...)`.
 
 ---
 
-## 3. Connection Management
+### REQ-QUIT-01 · P2 — Quit reason must be included in the displayed message
 
-### 3.1 Disconnect Double-Emission
+**EARS:** When a `QUIT` message is received, the system shall display the quit reason in the channel message if one is provided.
 
-**REQ-CONN-01** · P2
-> When the user initiates a disconnect, the system shall emit `disconnected()` exactly once, after the socket fully closes.
+**Root cause:** `handleQuit` constructs `IRCMessage(MessageType::Quit, "Quit", nick)` with the hardcoded text `"Quit"`. The parsed `reason` variable is discarded. `formattedText()` has a conditional for non-empty text that is never reached because text is always `"Quit"`.  
+**File:** `NetworkManager.cpp:633`
 
-- [ ] Remove manual `emit disconnected()` from `NetworkManager::disconnect()`; rely on `onDisconnected` slot
+**Test requirements:**
+- Given `:alice QUIT :Gone to lunch`, verify displayed message contains "Gone to lunch".
+- Given `:alice QUIT` (no reason), verify message is "alice quit" without a reason clause.
 
-### 3.2 Reconnection
-
-**REQ-CONN-02** · P3
-> When the connection is lost unexpectedly, the system shall offer the user an option to reconnect with exponential backoff (max 5 attempts, 30 s cap).
-
-*User story:* As a user, I want the client to attempt reconnection automatically, so that transient network drops don't require manual reconnection.
-
-- [ ] Add reconnection state machine to `NetworkManager`
+- [ ] Change `IRCMessage msg(MessageType::Quit, "Quit", nick)` to `IRCMessage msg(MessageType::Quit, reason, nick)`.
 
 ---
 
-## 4. User Interface
+### REQ-SSL-01 · P2 — SSL error handler must not crash on empty error list
 
-### 4.1 Private Messages — Query Tab
+**EARS:** If `onSslErrors` is called with an empty error list, the system shall emit a generic SSL error message rather than crashing.
 
-**REQ-UI-PM-01** · P1
-> When the client receives a private message and no query tab for that sender exists, the system shall create a query tab named after the sender and route the message to it.
+**Root cause:** `errors.first()` on an empty `QList` is undefined behaviour.  
+**File:** `NetworkManager.cpp:263-266`
 
-*(See REQ-MSG-01 above — wiring work is in MainWindow)*
+**Test requirements:**
+- Verify `onSslErrors({})` does not crash.
+- Verify `onSslErrors({QSslError(QSslError::CertificateExpired)})` emits the error string.
 
-- [ ] `MainWindow` must listen for `queryTabNeeded` signal and call `addQueryTab`
-- [ ] `addQueryTab` currently inserts at index 0; should append after existing tabs
-- [ ] Query tabs need a `(PM)` indicator or distinct tab style
-
-### 4.2 Chat Row Height
-
-**REQ-UI-ROW-01** · P1
-> The system shall render each chat message row at a height sufficient to display all wrapped text.
-
-*User story:* As a user, I want long messages to wrap and display fully, so that I do not miss truncated content.
-
-- [ ] `ChatItemDelegate::sizeHint` must compute document height using a `QTextDocument` with correct width, not return a hardcoded 18
-- [ ] Cache `QTextDocument` per index/content to avoid re-parsing on every paint call
-
-### 4.3 Auto-scroll Behaviour
-
-**REQ-UI-SCROLL-01** · P2
-> When new messages arrive, the system shall automatically scroll to the bottom only if the user's viewport was already at the bottom.
-
-*User story:* As a user, I want to scroll up to read history without being snapped back to the bottom on each new message.
-
-- [ ] In `ChatWidget::addMessage`, check `scrollBar->value() >= scrollBar->maximum() - 4` before calling `scrollToBottom()`
-
-### 4.4 Message Copy
-
-**REQ-UI-COPY-01** · P2
-> The system shall allow the user to select and copy text from the chat view.
-
-*User story:* As a user, I want to copy messages from the chat window, so that I can share or reference them.
-
-- [ ] Enable text selection in `ChatWidget` (consider switching from `QListView` + delegate to `QTextBrowser` for rich HTML display)
-
-### 4.5 User List Accuracy
-
-**REQ-UI-UL-01** · P2
-> When the currently visible channel tab changes, the system shall populate the user list with the users for that channel, regardless of whether the user list panel was visible when the NAMES reply arrived.
-
-- [ ] On tab switch, repopulate user list from the in-memory `IRCChannel::m_users` rather than relying on the original NAMES signal timing
-
-### 4.6 Channel Sidebar on Part
-
-**REQ-UI-SIDEBAR-01** · P2
-> When a channel tab is removed, the system shall also remove that channel's entry from the channel sidebar list.
-
-- [ ] Add `m_channelList->takeItem(...)` in `MainWindow::removeChannelTab`
-
-### 4.7 Channel Sidebar Double-Click
-
-**REQ-UI-SIDEBAR-02** · P3
-> When the user double-clicks an already-joined channel in the sidebar, the system shall switch to that channel's tab rather than issuing a JOIN.
-
-- [ ] Change double-click handler to call `m_channelTabs->setCurrentWidget(findChannelTab(name))`
-
-### 4.8 Nick Completion
-
-**REQ-UI-NICK-01** · P4
-> When the user presses Tab in the message input with a partial nick, the system shall complete to the nearest matching nick in the current channel.
-
-*User story:* As a user, I want Tab-completion for nicks, so that I can address users quickly without typing full nicks.
-
-- [ ] Implement tab-completion in `ChannelTab` / `m_inputEdit` key event filter
-
-### 4.9 Input History
-
-**REQ-UI-HIST-01** · P4
-> The system shall allow the user to navigate previously sent messages using the Up/Down arrow keys in the input field.
-
-- [ ] Add `QStringList m_inputHistory` with index to `ChannelTab`
-
-### 4.10 mIRC Color Rendering
-
-**REQ-UI-COLOR-01** · P4
-> When a message contains mIRC color codes (`\x03N,M`), the system shall render the text in the corresponding foreground and background colors.
-
-- [ ] Add mIRC color-code parser that converts `\x03N[,M]text` to `<span style="color:...">` in `IRCMessage::coloredText`
+- [ ] Guard: `if (errors.isEmpty()) { emit serverError("SSL error"); return; }`
+- [ ] Change to `for (const auto& e : errors) { emit serverError("SSL: " + e.errorString()); }` then disconnect.
 
 ---
 
-## 5. Architecture / Code Quality
+### REQ-CONN-01 · P2 — Pong timer must be stopped on disconnect
 
-### 5.1 Model Usage
+**EARS:** When the socket disconnects for any reason, the system shall stop the pong timer to prevent a spurious `connectionLost` signal.
 
-**REQ-ARCH-01** · P2
-> The system shall use `IRCUserModel` and `IRCChannelModel` as the data sources for the user list and channel sidebar views respectively, rather than imperative `QListWidget` item manipulation.
+**Root cause:** `onDisconnected` stops `m_pingTimer` but not `m_pongTimer`. A race between server close and pending pong timeout causes a second disconnect/lost signal.  
+**File:** `NetworkManager.cpp:211-216`
 
-- [ ] Replace `m_userList` (`QListWidget`) with `QListView` + `IRCUserModel`
-- [ ] Replace `m_channelList` (`QListWidget`) with `QListView` + `IRCChannelModel`
-- [ ] Remove the dead `IRCChannelModel` created in `MainWindow::initializeUI` that is never set on any view
+**Test requirements:**
+- Verify that closing the server connection while a PING is in-flight does not emit `connectionLost` after `disconnected`.
 
-### 5.2 Display Logic in Model
-
-**REQ-ARCH-02** · P3
-> The `IRCMessage` class shall not contain HTML formatting logic; formatting shall be the responsibility of the view layer.
-
-- [ ] Move `coloredText()` and `formattedText()` to a `IRCMessageFormatter` helper or the delegate
-- [ ] Remove the duplicate color table in `IRCMessageModel::data` / `ColorRole`
-
-### 5.3 Duplicate MAX_MESSAGES
-
-**REQ-ARCH-03** · P3
-> A single constant shall define the maximum number of retained messages per channel.
-
-- [ ] Define `MAX_MESSAGES` once (e.g., in `IRCMessage.h` or a `constants.h`) and remove the duplicate in `IRCChannel.h`
-
-### 5.4 m_userSet Dead Code
-
-**REQ-ARCH-04** · P3
-> `IRCChannel` shall use `m_userSet` for O(1) membership checks in `findUser`, `addUser`, and `removeUser`, or the field shall be removed.
-
-- [ ] Fix `addUser` to check `m_userSet.contains(nick)` before inserting
-- [ ] Fix `findUser` and `removeUser` to use the set
-- [ ] Remove linear-scan duplicates
-
-### 5.5 Duplicate findChannelTab / findQueryTab
-
-**REQ-ARCH-05** · P3
-> The system shall have a single `findTab(const QString& name)` function in `MainWindow`.
-
-- [ ] Merge `findChannelTab` and `findQueryTab` into one method
-
-### 5.6 Unused NetworkManager Argument in ChannelTab
-
-**REQ-ARCH-06** · P4
-> `ChannelTab` shall not accept a `NetworkManager*` parameter if it does not use it.
-
-- [ ] Remove `NetworkManager* nm` from `ChannelTab` constructor signature and all call sites
-
-### 5.7 Case-Insensitive Nick/Channel Comparison
-
-**REQ-ARCH-07** · P2
-> The system shall compare nick and channel names using the casemapping declared in `ISUPPORT` (default: `rfc1459`).
-
-- [ ] Add `CaseMap` helper that normalises strings per the active casemapping
-- [ ] Replace all `QString::operator==` comparisons for nicks and channels with the normalised form
-
-### 5.8 IRCChannelModel::addChannel Notification
-
-**REQ-ARCH-08** · P3
-> `IRCChannelModel::addChannel` shall use `beginInsertRows`/`endInsertRows` rather than `beginResetModel`/`endResetModel`.
-
-- [ ] Replace reset-model pair with proper insert-rows pair
-
-### 5.9 IRCChannelModel::setCurrentChannel Empty Guard
-
-**REQ-ARCH-09** · P3
-> `IRCChannelModel::setCurrentChannel` shall not emit `dataChanged` when the channel list is empty.
-
-- [ ] Add `if (m_channels.isEmpty()) return;` before the `emit dataChanged` call
-
-### 5.10 Header Guard Name
-
-**REQ-ARCH-10** · P4
-> Each header file's include guard shall match the file name.
-
-- [ ] Rename guard `IRCMODELMANAGER_H` → `IRCMESSAGEMODEL_H` in `IRCMessageModel.h`
+- [ ] Add `m_pongTimer->stop();` in `onDisconnected`.
 
 ---
 
-## 6. Build / Infrastructure
+### REQ-READYREAD-01 · P2 — `onReadyRead` must not use `sender()` for socket access
 
-### 6.1 Install Target
+**EARS:** When data is available on the socket, the system shall read from `m_socket` directly rather than casting `sender()`.
 
-**REQ-BUILD-01** · P3
-> The CMake install target shall install the executable to `bin/` on Linux and Windows in addition to the macOS bundle destination.
+**Root cause:** `qobject_cast<QTcpSocket*>(sender())` returns null if the slot is ever invoked without a signal context (e.g., direct call in tests). `m_socket` is already in scope.  
+**File:** `NetworkManager.cpp:219`
 
-- [ ] Add `RUNTIME DESTINATION bin` to `install(TARGETS qwenirc ...)` in `CMakeLists.txt`
+**Test requirements:**
+- Verify `onReadyRead()` processes data when called directly (not via signal).
 
-### 6.2 build.sh Portability
-
-**REQ-BUILD-02** · P3
-> `build.sh` shall locate the Qt6 CMake prefix using `qmake6 -query QT_INSTALL_PREFIX` or `cmake --find-package`, which are portable across distributions.
-
-- [ ] Replace `qt6-cmake-config-path` with `$(qmake6 -query QT_INSTALL_PREFIX 2>/dev/null || echo "/usr/lib/cmake/Qt6")`
-
-### 6.3 C++ Extensions
-
-**REQ-BUILD-03** · P4
-> The build shall disable compiler-specific C++ extensions.
-
-- [ ] Add `set(CMAKE_CXX_EXTENSIONS OFF)` to `CMakeLists.txt`
-
-### 6.4 Tests
-
-**REQ-TEST-01** · P3
-> The project shall include unit tests for `NetworkManager::parseMessage`, `IRCMessage::coloredText`, and `IRCUserModel::addUser`/`removeUser`.
-
-*User story:* As a developer, I want automated tests for the parser and models, so that regressions in protocol handling are caught before release.
-
-- [ ] Add `find_package(Qt6 ... Test)` and a `tests/` directory with at least 3 test cases per class above
+- [ ] Replace `QTcpSocket* socket = qobject_cast<QTcpSocket*>(sender()); if (!socket) return;` and all `socket->` accesses with `m_socket->`.
 
 ---
 
-## 7. ServerDialog
+### REQ-USERLIST-01 · P2 — User left must strip all standard prefix characters including `@`
 
-- [ ] **P1** Instantiate `m_themeCombo` or remove the dead member declaration
-- [ ] **P2** Replace `&QWidget::close` with `&QDialog::reject` for the Cancel button
-- [ ] **P2** Add port number validator (`QIntValidator(1, 65535)`) to `m_portEdit`
-- [ ] **P2** Add a TLS/SSL checkbox (see REQ-TLS-01)
-- [ ] **P3** Save the channel field to `QSettings`
-- [ ] **P3** Parse comma-separated channels in the channel field and join each after MOTD
+**EARS:** When a user leaves a channel and the user list contains that nick with a prefix character, the system shall strip all standard IRC prefix characters (`~`, `&`, `@`, `%`, `+`) before comparing to find and remove the entry.
+
+**Root cause:** The regex `[~%&+]` omits `@` (operator), the most common prefix. Ops who leave a channel remain in the user list permanently.  
+**File:** `MainWindow.cpp:408`
+
+**Test requirements:**
+- Verify `@alice` is removed when `alice` parts.
+- Verify `+alice` is removed when `alice` parts.
+- Verify `alice` (no prefix) is removed when `alice` parts.
+
+- [ ] Change regex to `[~&@%+]` to include `@`.
 
 ---
 
-## 8. Deferred / Out of Scope for v0.1
+### REQ-NICKCHANGE-01 · P2 — Nick change must update all tabs and fix user list entry
 
-- [ ] SASL PLAIN / EXTERNAL authentication
-- [ ] DCC file transfer
-- [ ] Reconnection with backoff (stub exists, logic missing)
-- [ ] Per-network configuration profiles
-- [ ] Logging messages to disk
-- [ ] Notification / highlight system
-- [ ] Ignore list
+**EARS:** When a nick change is received, the system shall post the change message to every channel tab where the user was present, and shall update the user list entry to show the new nick with the correct prefix.
+
+**Root cause:** `onUserChangedNick` only posts to `m_currentChannel` and replaces the user list item text with `"oldNick is now known as newNick"` — a sentence, not a nick.  
+**File:** `MainWindow.cpp:417-437`
+
+**Test requirements:**
+- Verify nick-change message appears in every channel tab where the user was present.
+- Verify the user list shows `newNick` (with preserved prefix) after the change, not a sentence.
+
+- [ ] Iterate all `ChannelTab*` in `m_channelTabs` and post the message to each whose backing `IRCChannel` contains the old nick.
+- [ ] In the user list update loop, replace `m_userList->item(i)->setText("... is now known as ...")` with the new nick (re-apply any prefix the item had).
+
+---
+
+### REQ-PING-01 · P2 — PING receipt must not flood the server tab
+
+**EARS:** When a PING is received from the server, the system shall respond with PONG and shall not emit a user-visible message to the server tab.
+
+**Root cause:** `handleCapCommand` PING handler still calls `emit serverChannelMessage("PONG: " + params[0])`, producing a line in the Server tab every 3 minutes.  
+**File:** `NetworkManager.cpp:367-370`
+
+**Test requirements:**
+- Verify that receiving a PING from the server results in a PONG being sent and no message appearing in the server tab.
+
+- [ ] Remove `emit serverChannelMessage("PONG: " + params[0]);` from the PING handler.
+
+---
+
+### REQ-EXTRACTPREFIX-01 · P2 — Mode prefix extraction must correctly parse ISUPPORT PREFIX value
+
+**EARS:** When ISUPPORT `PREFIX` is available, the system shall parse the `(mode_letters)symbols` format and use only the symbols portion to identify prefix characters on NAMES nicks.
+
+**Root cause:** `extractModePrefix` default value `"@&*(op:s t: v: a"` is garbage. The function iterates over the entire PREFIX string (including letters and parentheses) when searching for a match, potentially stripping wrong characters from nicks.  
+**File:** `NetworkManager.cpp:867-883`
+
+**Test requirements:**
+- Given `PREFIX=(ov)@+`, verify `extractModePrefix("@alice")` returns `@`.
+- Given `PREFIX=(ov)@+`, verify `extractModePrefix("+bob")` returns `+`.
+- Given `PREFIX=(ov)@+`, verify `extractModePrefix("charlie")` returns null/empty.
+- Given no ISUPPORT PREFIX, verify default of `@%+` is used.
+
+- [ ] Parse `PREFIX=(letters)symbols`: extract the substring after `)` as the valid prefix chars.
+- [ ] Use a sensible default `"@%+"` when PREFIX is absent.
+- [ ] In `extractModePrefix(nick)`, check only whether `nick[0]` is in the symbols set.
+
+---
+
+## 3. MEDIUM — Incorrect Behaviour
+
+### REQ-CAP-03 · P2 — CAP ACK must normalise cap names before storing
+
+**EARS:** When a `CAP ACK` response is received, the system shall strip value suffixes (text after `=`) from each capability name before inserting into the active capability set.
+
+**Root cause:** `sasl=PLAIN` is stored as `"sasl=PLAIN"`, making `m_activeCaps.contains("sasl")` false.  
+**File:** `NetworkManager.cpp:712-719`
+
+**Test requirements:**
+- Given `CAP * ACK :sasl=PLAIN echo-message`, verify `m_activeCaps.contains("sasl")` and `m_activeCaps.contains("echo-message")` are both true.
+
+- [ ] For each cap token in the ACK list, strip everything from `=` onwards before inserting.
+- [ ] Also handle `-` prefix (cap disable): if cap starts with `-`, remove it from `m_activeCaps`.
+
+---
+
+### REQ-QUIT-02 · P2 — Quit reason must use correct field
+
+**EARS:** When constructing a Quit message for display, the system shall use `reason` as the `m_text` field rather than the hardcoded string `"Quit"`.
+
+- [ ] Already addressed in REQ-QUIT-01 above.
+
+---
+
+### REQ-MODE-02 · P2 — `ChannelTab::setMode` must not overwrite the topic bar
+
+**EARS:** When a channel mode string is received, the system shall display it in the window title or status bar, and shall not overwrite the channel topic in the topic bar.
+
+**User story:** As a user, I want the topic and mode to be shown separately so that a MODE change doesn't erase the channel topic.
+
+**File:** `ChannelTab.cpp:49-51`
+
+**Test requirements:**
+- Verify that after setting a topic then receiving a MODE, the topic bar still shows the original topic.
+
+- [ ] Remove `setTopic("Channel mode: " + mode)` from `ChannelTab::setMode`.
+- [ ] Display mode in the parent `QTabWidget` tab title or a separate label, or discard it if no UI location exists yet.
+
+---
+
+### REQ-COPY-01 · P2 — Copy must place plain text (not HTML) on the clipboard
+
+**EARS:** When the user selects Copy from the chat context menu, the system shall place the plain-text content of the message on the clipboard, with HTML markup removed.
+
+**User story:** As a user, I want to copy chat messages and paste them into other applications without HTML tags appearing.
+
+**File:** `ChatWidget.cpp:106-108`
+
+**Test requirements:**
+- Verify that copying a message containing `<b>nick</b>` produces clipboard text like `[12:34:56] nick: message`, not HTML.
+
+- [ ] Strip HTML before placing on clipboard: use `QTextDocument doc; doc.setHtml(text); clipboard->setText(doc.toPlainText())`.
+
+---
+
+### REQ-SIZEHINT-01 · P2 — Chat row height must use forced document layout
+
+**EARS:** The system shall compute each chat message row's display height by forcing `QTextDocument` layout before measuring, so that multi-line messages are not clipped.
+
+**Root cause:** `block.layout()->lineCount()` before layout is forced returns 0. The fallback `fm.height() * 1.5` fires for most rows, producing inconsistent heights.  
+**File:** `ChatWidget.cpp:40-64`
+
+**Test requirements:**
+- Verify a two-line wrapped message is rendered with a height ≥ 2× single-line height.
+- Verify a single-line message renders at ~1× line height.
+
+- [ ] Simplify `sizeHint` to:
+  ```cpp
+  QTextDocument doc;
+  doc.setHtml(text);
+  doc.setTextWidth(option.rect.width() > 0 ? option.rect.width() : 600);
+  return QSize(qRound(doc.idealWidth()), qRound(doc.size().height()) + 4);
+  ```
+  `doc.size()` forces synchronous layout.
+
+---
+
+### REQ-ISUPPORT-01 · P2 — ISUPPORT loop must start at index 1
+
+**EARS:** When a 005 RPL_ISUPPORT reply is received, the system shall parse tokens beginning at `params[1]`, skipping only the recipient nick at `params[0]`.
+
+**Root cause:** Loop starts at `i = 2`, skipping `params[1]` which commonly holds `CHANTYPES` — the first and most important token.  
+**File:** `NetworkManager.cpp:849`
+
+**Test requirements:**
+- Given `:srv 005 me CHANTYPES=# CASEMAPPING=rfc1459 :are supported`, verify `m_isupport["CHANTYPES"] == "#"`.
+
+- [ ] Change `for (int i = 2; i < params.size(); ++i)` to `for (int i = 1; i < params.size(); ++i)`.
+- [ ] Skip the trailing `:are supported by this server` token by checking `token.startsWith(':')` or by not processing the last param if it starts with `:`.
+
+---
+
+### REQ-NAMES-01 · P2 — Names received must not be gated on user-list visibility
+
+**EARS:** When a NAMES reply is received for the current channel, the system shall update the user list regardless of whether the user-list panel is currently visible.
+
+**Root cause:** `onNamesReceived` returns early if `!m_userList->isVisible()`. Hiding the panel then joining a channel leaves the user list permanently empty.  
+**File:** `MainWindow.cpp:499`
+
+**Test requirements:**
+- Hide user list panel, join a channel, re-show panel — verify user list is populated.
+
+- [ ] Remove the `|| !m_userList->isVisible()` guard from `onNamesReceived`.
+
+---
+
+### REQ-CHANNELS-01 · P2 — Channel list from `ServerDialog` must trim whitespace per entry
+
+**EARS:** When the user enters a comma-separated channel list, the system shall trim leading and trailing whitespace from each channel name before using it.
+
+**Root cause:** `"#a, #b".split(',')` → `["#a", " #b"]`. The space prefix makes `" #b"` an invalid JOIN target.  
+**File:** `ServerDialog.cpp:71`
+
+**Test requirements:**
+- Verify `" #b".trimmed()` → `"#b"` is used in the JOIN command.
+
+- [ ] Change `m_channelEdit->text().split(',', Qt::SkipEmptyParts)` to `.split(',').filter/map` with `.trimmed()` applied to each element, discarding empties after trim.
+
+---
+
+### REQ-RECONNECT-01 · P2 — Socket deletion during reconnect must not deliver signals to freed memory
+
+**EARS:** If the socket is deleted during a reconnection attempt, the system shall block pending signals before deletion to prevent use-after-free.
+
+**Root cause:** `m_socket->abort()` schedules signal delivery; `delete m_socket` immediately follows. Queued signals may fire on freed memory.  
+**File:** `NetworkManager.cpp:40-54`
+
+**Test requirements:**
+- Verify calling `connectToServer` twice in rapid succession does not crash.
+
+- [ ] Before `delete m_socket`, call `m_socket->blockSignals(true)` and `m_socket->disconnect()` (QObject disconnect, not IRC disconnect).
+
+---
+
+### REQ-CHANNELMODEL-01 · P3 — Dead `IRCChannelModel` must be removed or wired to the sidebar
+
+**EARS:** The system shall not instantiate objects that are never used as data sources for any view.
+
+**Root cause:** `m_channelModel` (`IRCChannelModel`) is constructed but never set on `m_channelList` (a `QListWidget`). Channel names are added imperatively via `addItem`, not via the model.  
+**File:** `MainWindow.cpp:93`, `MainWindow.h:71`
+
+**Test requirements:**
+- Either: verify channel sidebar uses `IRCChannelModel` as its data source.
+- Or: verify `m_channelModel` declaration and construction are absent.
+
+- [ ] Either wire `m_channelModel` to `m_channelList` (replace `QListWidget` with `QListView`), **or** delete `m_channelModel` entirely and keep imperative `QListWidget` management.
+
+---
+
+### REQ-CLI-01 · P3 — Parsed CLI arguments must be used
+
+**EARS:** When the user supplies `--host`, `--port`, `--nick`, or `--tls` on the command line, the system shall pre-populate the connection dialog or connect directly without showing the dialog.
+
+**Root cause:** All CLI options are defined and parsed but `parser.value(...)` is never called. `MainWindow` always shows the connection dialog.  
+**File:** `src/main.cpp:13-30`
+
+**Test requirements:**
+- Running `qwenirc --host irc.example.com --port 6667 --nick testuser` shall pre-fill those fields in the dialog.
+
+- [ ] After `parser.process(app)`, read values and pass them to `MainWindow` constructor (or a separate factory method).
+
+---
+
+### REQ-SETMODE-01 · P3 — `setMode` topic-bar abuse
+
+Already covered under REQ-MODE-02.
+
+---
+
+## 4. LOW
+
+### REQ-ESCAPEHTML-01 · P4 — Remove `escapeHTML` wrapper
+
+**EARS:** The system shall not maintain a static wrapper method that merely delegates to `QString::toHtmlEscaped()`.
+
+- [ ] Delete `IRCMessage::escapeHTML` declaration from `IRCMessage.h` and implementation from `IRCMessage.cpp`.
+- [ ] Replace all `escapeHTML(x)` calls with `x.toHtmlEscaped()`.
+
+---
+
+### REQ-DUPMETHOD-01 · P4 — Remove duplicate `ChatWidget::setChannel`
+
+**EARS:** The system shall expose a single method for setting the channel name on `ChatWidget`.
+
+- [ ] Remove `setChannel(const QString&)` from `ChatWidget`; all callers already use `setChannelName`.
+
+---
+
+### REQ-USERPREFIX-01 · P4 — `IRCUser::userPrefix` must store display symbol, not mode letter
+
+**EARS:** The system shall store the prefix display character (`@`, `+`, `%`) in `IRCUser::userPrefix`, not the mode letter (`o`, `v`, `h`).
+
+**Root cause:** `applyMode` (once fixed per REQ-MODE-01) must map mode letters to symbols using the PREFIX ISUPPORT mapping before calling `setUserPrefix`.
+
+- [ ] Ensure the mapping from mode letter → symbol happens in `NetworkManager::handleMode` or `IRCChannel::applyMode`, not in `IRCUserModel::data`.
+
+---
+
+### REQ-OPERATOR-01 · P4 — `IRCMessage::operator==` must include timestamp
+
+**EARS:** When two `IRCMessage` objects are compared for equality, the system shall include the timestamp field in the comparison.
+
+- [ ] Add `&& m_timestamp == other.m_timestamp` to `IRCMessage::operator==`.
+
+---
+
+### REQ-LOGGING-01 · P4 — `Q_LOGGING_CATEGORY` must be used or removed
+
+**EARS:** The system shall not declare a logging category that is never referenced.
+
+- [ ] Either add `qCDebug(logIRC)` calls at key parse/send points, or remove `Q_LOGGING_CATEGORY(logIRC, "qwenirc.irc")`.
+
+---
+
+### REQ-AUTOUIC-01 · P4 — Remove unused `CMAKE_AUTOUIC`
+
+**EARS:** The build system shall not enable processing stages for file types that do not exist in the project.
+
+- [ ] Remove `set(CMAKE_AUTOUIC ON)` from `CMakeLists.txt` (no `.ui` files present).
+
+---
+
+### REQ-DEADMEMBER-01 · P4 — Remove `m_channel` dead member from `ServerDialog`
+
+- [ ] Remove `QString m_channel` from `ServerDialog.h` and its initialiser from the constructor.
+
+---
+
+### REQ-CHANNELREGEX-01 · P4 — Channel validator regex must allow non-word characters
+
+**EARS:** When validating channel names, the system shall allow any character that IRC permits in channel names, not just `\w` (word chars).
+
+- [ ] Replace or relax the `QRegularExpressionValidator` to accept `-`, `.`, and other common channel name characters, or remove the validator and rely on server rejection.
+
+---
+
+### REQ-CLOSETAB-01 · P4 — `ChannelTab::close` must remove itself from `QTabWidget` before deletion
+
+**EARS:** When a channel tab is closed, the system shall remove it from the parent `QTabWidget` before calling `deleteLater`.
+
+- [ ] In `ChannelTab::close()`, call `parentWidget()` cast to find the `QTabWidget` and `removeTab` before `deleteLater()`.
+
+---
+
+### REQ-WAITINGCAPS-01 · P4 — Remove unused `m_waitingCaps` field
+
+**EARS:** The system shall not retain member variables that are set but never read.
+
+- [ ] Delete `m_waitingCaps` from header and all assignment sites.
+
+---
+
+## 5. Testing Infrastructure
+
+### REQ-TEST-01 · P3 — Unit tests for IRC line parser
+
+**EARS:** The system shall include automated tests that verify `NetworkManager::parseMessage` correctly parses prefix, command, and parameter fields for both prefixed and non-prefixed lines, including IRCv3 message tags.
+
+**User story:** As a developer, I want parser tests so that numeric-reply regressions are caught before they reach users.
+
+- [ ] Add `tests/` directory with `CMakeLists.txt` using `find_package(Qt6 REQUIRED COMPONENTS Test)`.
+- [ ] Test: `:server 353 me = #chan :@op +voice user` → channel `"#chan"`, users `["op","voice","user"]` with correct prefixes.
+- [ ] Test: `@time=2024-01-01T12:00:00Z :srv 332 me #chan :topic` → timestamp parsed, channel `"#chan"`, topic `"topic"`.
+- [ ] Test: `:srv PING :pingtoken` → `PONG :pingtoken` sent, no user message emitted.
+- [ ] Test: `CAP * LS :sasl server-time echo-message` → intersection computed correctly, `CAP REQ` sent with correct cap list.
+
+### REQ-TEST-02 · P3 — Unit tests for IRCUserModel
+
+- [ ] Test: `addUser` with duplicate nick (case-insensitive) does not insert duplicate.
+- [ ] Test: `removeUser("alice")` removes `@alice` from display list.
+- [ ] Test: `setUsers` populates model and emits `modelReset`.
+
+### REQ-TEST-03 · P3 — Unit tests for IRCMessage rendering
+
+- [ ] Test: `coloredText()` for `MessageType::Message` with nick `<b>nick</b>` — verify `<b>` is HTML-escaped in output.
+- [ ] Test: `formattedText()` for `MessageType::Quit` with non-empty reason includes the reason.
+- [ ] Test: `formattedText()` for `MessageType::TopicSet` uses `%1` placeholder correctly.
+
+---
+
+## Audit Status
+
+After all items above are implemented, a fresh audit will be performed to verify correctness and identify any remaining issues.
