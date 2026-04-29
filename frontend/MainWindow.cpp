@@ -297,8 +297,8 @@ void MainWindow::setStatus(const QString& status) {
 
 void MainWindow::onConnect(const QString& host, quint16 port,
                            const QString& nick, const QString& pass,
-                           const QString& channel) {
-    m_network->connectToServer(host, port, nick, pass, channel);
+                           const QString& channel, bool useTLS) {
+    m_network->connectToServer(host, port, nick, pass, channel, useTLS);
 }
 
 void MainWindow::onDisconnected() {

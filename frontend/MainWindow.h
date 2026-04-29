@@ -30,7 +30,7 @@ public:
 private slots:
     void onConnect(const QString& host, quint16 port,
                    const QString& nick, const QString& pass,
-                   const QString& channel);
+                   const QString& channel, bool useTLS);
     void onDisconnected();
     void onServerError(const QString& error);
     void onServerMessage(const QString& message);

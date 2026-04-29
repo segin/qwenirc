@@ -43,6 +43,12 @@ ServerDialog::ServerDialog(QWidget* parent)
     m_tlsCheckBox = new QCheckBox("Use TLS/SSL");
     layout->addWidget(m_tlsCheckBox, 5, 0, 1, 2);
 
+    connect(m_tlsCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
+        if (checked && m_portEdit->text().toUInt() == 6667) {
+            m_portEdit->setText("6697");
+        }
+    });
+
     m_connectBtn = new QPushButton("Connect");
     m_connectBtn->setDefault(true);
     layout->addWidget(m_connectBtn, 6, 0);

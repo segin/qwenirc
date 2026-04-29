@@ -145,8 +145,9 @@ Status: `[ ]` open · `[x]` done
 - Verify selecting the TLS checkbox and connecting results in `QSslSocket::connectToHostEncrypted` being called, not `QTcpSocket::connectToHost`.
 - Verify port defaults to 6697 when TLS is checked (UX improvement, not blocking).
 
-- [ ] Add `bool useTLS` parameter to `MainWindow::onConnect` slot declaration in `MainWindow.h`.
-- [ ] Update `MainWindow::onConnect` body to pass `useTLS` to `m_network->connectToServer(...)`.
+- [x] Add `bool useTLS` parameter to `MainWindow::onConnect` slot declaration in `MainWindow.h`.
+- [x] Update `MainWindow::onConnect` body to pass `useTLS` to `m_network->connectToServer(...)`.
+- [x] Set port default to 6697 when TLS checkbox is toggled (in `ServerDialog.cpp`).
 
 ---
 
