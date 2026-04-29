@@ -479,7 +479,7 @@ Already covered under REQ-MODE-02.
 
 **EARS:** The system shall expose a single method for setting the channel name on `ChatWidget`.
 
-- [ ] Remove `setChannel(const QString&)` from `ChatWidget`; all callers already use `setChannelName`.
+- [x] Remove `setChannel(const QString&)` from `ChatWidget`; all callers already use `setChannelName`.
 
 ---
 

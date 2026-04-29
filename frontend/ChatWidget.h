@@ -16,7 +16,6 @@ class ChatWidget : public QWidget {
 public:
     explicit ChatWidget(QWidget* parent = nullptr);
 
-    void setChannel(const QString& channel);
     void setTopic(const QString& topic);
     void setTopicVisible(bool visible);
     void addMessage(const IRCMessage& msg);

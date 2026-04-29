@@ -19,7 +19,6 @@ void ChannelTab::initializeUI() {
     m_mainLayout->setSpacing(0);
 
     m_chatWidget = new ChatWidget();
-    m_chatWidget->setChannel(m_channelName);
     m_chatWidget->setChannelName(m_channelName);
 
     m_mainLayout->addWidget(m_chatWidget, 1);

@@ -77,10 +77,6 @@ ChatWidget::ChatWidget(QWidget* parent)
     m_mainLayout->addWidget(m_chatList, 1);
 }
 
-void ChatWidget::setChannel(const QString& channel) {
-    m_channelName = channel;
-}
-
 void ChatWidget::setTopic(const QString& topic) {
     m_topicEdit->setPlainText(topic);
     m_topicEdit->setMaximumHeight(40);
