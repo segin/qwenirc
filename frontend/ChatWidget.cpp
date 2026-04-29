@@ -37,31 +37,12 @@ public:
         painter->restore();
     }
 
-     QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override {
+    QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override {
         QString text = index.data(Qt::DisplayRole).toString();
         QTextDocument doc;
         doc.setHtml(text);
-        doc.setTextWidth(option.rect.width());
-        // Calculate total height by iterating through all blocks
-        qreal totalHeight = 0;
-        for (QTextBlock block = doc.begin(); block.isValid(); block = block.next()) {
-            QTextLayout* layout = block.layout();
-            if (layout && layout->lineCount() > 0) {
-                for (int i = 0; i < layout->lineCount(); i++) {
-                    QTextLine line = layout->lineAt(i);
-                    if (line.isValid()) {
-                        QRectF rect = line.rect();
-                        totalHeight += rect.height();
-                    }
-                }
-            } else {
-                // Fallback: estimate single-line height from font
-                QFontMetrics fm(option.font);
-                totalHeight += fm.height() * 1.5;
-            }
-        }
-        if (totalHeight <= 0) totalHeight = 18;
-        return QSize(option.rect.width(), qCeil(totalHeight + 4));
+        doc.setTextWidth(option.rect.width() > 0 ? option.rect.width() : 600);
+        return QSize(qRound(doc.idealWidth()), qRound(doc.size().height()) + 4);
     }
 };
 

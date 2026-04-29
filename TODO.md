@@ -361,7 +361,7 @@ Status: `[ ]` open · `[x]` done
 - Verify a two-line wrapped message is rendered with a height ≥ 2× single-line height.
 - Verify a single-line message renders at ~1× line height.
 
-- [ ] Simplify `sizeHint` to:
+- [x] Simplify `sizeHint` to:
   ```cpp
   QTextDocument doc;
   doc.setHtml(text);
