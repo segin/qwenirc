@@ -1,8 +1,5 @@
 #include "NetworkManager.h"
-#include <QLoggingCategory>
 #include <QSslSocket>
-
-Q_LOGGING_CATEGORY(logIRC, "qwenirc.irc")
 
 NetworkManager::NetworkManager(QObject* parent)
     : QObject(parent)

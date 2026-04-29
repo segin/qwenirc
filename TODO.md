@@ -510,7 +510,7 @@ Already covered under REQ-MODE-02.
 
 **EARS:** The system shall not declare a logging category that is never referenced.
 
-- [ ] Either add `qCDebug(logIRC)` calls at key parse/send points, or remove `Q_LOGGING_CATEGORY(logIRC, "qwenirc.irc")`.
+- [x] Removed unused `Q_LOGGING_CATEGORY(logIRC, "qwenirc.irc")` and `#include <QLoggingCategory>` from `NetworkManager.cpp`.
 
 ---
 
