@@ -425,7 +425,7 @@ Status: `[ ]` open · `[x]` done
 **Test requirements:**
 - Verify calling `connectToServer` twice in rapid succession does not crash.
 
-- [ ] Before `delete m_socket`, call `m_socket->blockSignals(true)` and `m_socket->disconnect()` (QObject disconnect, not IRC disconnect).
+- [x] Before `delete m_socket`, call `m_socket->blockSignals(true)` and `m_socket->disconnect()` (QObject disconnect, not IRC disconnect).
 
 ---
 

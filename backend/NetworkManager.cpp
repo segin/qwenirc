@@ -49,6 +49,8 @@ void NetworkManager::connectToServer(const QString& host, quint16 port,
     emit stateChanged(m_state);
     
     if (useTLS) {
+        m_socket->blockSignals(true);
+        m_socket->disconnect();
         delete m_socket;
         QSslSocket* ssl = new QSslSocket(this);
         m_socket = ssl;
