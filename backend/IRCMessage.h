@@ -26,7 +26,8 @@ public:
 
     bool operator==(const IRCMessage& other) const {
         return m_type == other.m_type && m_text == other.m_text
-            && m_sender == other.m_sender && m_channel == other.m_channel;
+            && m_sender == other.m_sender && m_channel == other.m_channel
+            && m_timestamp == other.m_timestamp;
     }
 
     MessageType type() const { return m_type; }

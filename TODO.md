@@ -502,7 +502,7 @@ Already covered under REQ-MODE-02.
 
 **EARS:** When two `IRCMessage` objects are compared for equality, the system shall include the timestamp field in the comparison.
 
-- [ ] Add `&& m_timestamp == other.m_timestamp` to `IRCMessage::operator==`.
+- [x] Added `&& m_timestamp == other.m_timestamp` to `IRCMessage::operator==` in IRCMessage.h.
 
 ---
 
