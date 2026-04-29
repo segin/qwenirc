@@ -373,9 +373,35 @@ void MainWindow::onUserChangedNick(const QString& oldNick, const QString& newNic
         QString("%1 -> %2").arg(oldNick).arg(newNick),
         oldNick);
 
-    auto* tab = findChannelTab(m_currentChannel);
-    if (tab) {
-        tab->addMessage(msg);
+    // Post to all channel tabs where old nick was present
+    for (auto it = m_network->channels().begin(); it != m_network->channels().end(); ++it) {
+        IRCChannel* ch = it.value();
+        if (ch->findUser(oldNick) != nullptr) {
+            ChannelTab* tab = findChannelTab(it.key());
+            if (tab) {
+                tab->addMessage(msg);
+            }
+        }
+    }
+
+    // Update the user list for current channel
+    if (!m_currentChannel.isEmpty()) {
+        QRegularExpression re("[~&@%+]");
+        IRCChannel* ch = m_network->channel(m_currentChannel);
+        IRCUser* user = ch ? ch->findUser(oldNick) : nullptr;
+        for (int i = 0; i < m_userList->count(); ++i) {
+            QString text = m_userList->item(i)->text();
+            QString bareNick = text;
+            bareNick.replace(re, "");
+            if (bareNick == oldNick) {
+                if (user) {
+                    m_userList->item(i)->setText(user->userPrefix() + newNick);
+                } else {
+                    m_userList->item(i)->setText(newNick);
+                }
+                break;
+            }
+        }
     }
 }
 

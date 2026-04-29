@@ -249,14 +249,14 @@ Status: `[ ]` open · `[x]` done
 **EARS:** When a nick change is received, the system shall post the change message to every channel tab where the user was present, and shall update the user list entry to show the new nick with the correct prefix.
 
 **Root cause:** `onUserChangedNick` only posts to `m_currentChannel` and replaces the user list item text with `"oldNick is now known as newNick"` — a sentence, not a nick.  
-**File:** `MainWindow.cpp:417-437`
+**File:** `MainWindow.cpp:371-380`
 
 **Test requirements:**
 - Verify nick-change message appears in every channel tab where the user was present.
 - Verify the user list shows `newNick` (with preserved prefix) after the change, not a sentence.
 
-- [ ] Iterate all `ChannelTab*` in `m_channelTabs` and post the message to each whose backing `IRCChannel` contains the old nick.
-- [ ] In the user list update loop, replace `m_userList->item(i)->setText("... is now known as ...")` with the new nick (re-apply any prefix the item had).
+- [x] Iterate all `IRCChannel*` via `m_network->channels()` and post the message to each whose backing `IRCChannel` contains the old nick.
+- [x] In the user list update loop, find the item matching oldNick (stripping prefix chars), replace with `userPrefix() + newNick` (or just `newNick` if no prefix found).
 
 ---
 
