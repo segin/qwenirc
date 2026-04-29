@@ -540,7 +540,8 @@ Already covered under REQ-MODE-02.
 
 **EARS:** When a channel tab is closed, the system shall remove it from the parent `QTabWidget` before calling `deleteLater`.
 
-- [ ] In `ChannelTab::close()`, call `parentWidget()` cast to find the `QTabWidget` and `removeTab` before `deleteLater()`.
+- [x] In `ChannelTab::close()`, call `parentWidget()` cast to find the `QTabWidget` and `removeTab` before `deleteLater()`.
+- [x] In `MainWindow`, enable close buttons via `tabBar()->setTabsClosable(true)` and connect `tabCloseRequested` to call `close()` on the tab.
 
 ---
 

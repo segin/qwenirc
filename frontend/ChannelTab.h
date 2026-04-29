@@ -25,6 +25,9 @@ public:
     void setChatModel(QAbstractItemModel* model);
     const QString& channelName() const { return m_channelName; }
 
+public slots:
+    void close();
+
 signals:
     void messageSent(const QString& message);
 

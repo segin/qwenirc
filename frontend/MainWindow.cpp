@@ -99,8 +99,15 @@ void MainWindow::initializeUI() {
 
     // Channel tabs (QTabWidget)
     m_channelTabs = new QTabWidget();
-    mainSplitter->addWidget(m_channelTabs);
-    mainSplitter->setStretchFactor(1, 1);
+   m_channelTabs->tabBar()->setTabsClosable(true);
+    connect(m_channelTabs, &QTabWidget::tabCloseRequested, this, [this](int index) {
+        QString tabName = m_channelTabs->tabText(index);
+        if (tabName == "Server") return;
+        ChannelTab* tab = qobject_cast<ChannelTab*>(m_channelTabs->widget(index));
+        if (tab) {
+            tab->close();
+        }
+    });
 
     // User list sidebar
     m_userList = new QListWidget();

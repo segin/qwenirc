@@ -66,3 +66,14 @@ void ChannelTab::setMode(const QString& mode) {
         tw->setTabText(tw->indexOf(this), channelName() + " [" + mode + "]");
     }
 }
+
+void ChannelTab::close() {
+    QTabWidget* tw = qobject_cast<QTabWidget*>(parentWidget());
+    if (tw) {
+        int idx = tw->indexOf(this);
+        if (idx >= 0) {
+            tw->removeTab(idx);
+        }
+    }
+    deleteLater();
+}
