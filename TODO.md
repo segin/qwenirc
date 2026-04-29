@@ -27,8 +27,8 @@ Status: `[ ]` open · `[x]` done
 - Verify `CAP REQ :server-time echo-message` (or subset) is sent, not `CAP REQ :` with empty list.
 - Verify no request is sent for caps the server did not advertise.
 
-- [ ] In `handleCapCommand` LS branch, collect caps from `params.mid(2)`, then for each element call `.split(' ', Qt::SkipEmptyParts)` to get individual cap names before inserting into `availableCaps`.
-- [ ] Handle multiline CAP LS (`*` indicator at params[2]): accumulate caps across multiple LS responses; send REQ only when the non-`*` final LS arrives.
+- [x] In `handleCapCommand` LS branch, collect caps from `params.mid(2)`, then for each element call `.split(' ', Qt::SkipEmptyParts)` to get individual cap names before inserting into `availableCaps`.
+- [x] Handle multiline CAP LS (`*` indicator at params[2]): accumulate caps across multiple LS responses; send REQ only when the non-`*` final LS arrives.
 
 ---
 
@@ -47,11 +47,11 @@ Status: `[ ]` open · `[x]` done
 - Verify NICK is sent before USER.
 - Verify PASS is sent before NICK when a password is set.
 
-- [ ] Move PASS + NICK + USER + `m_pingTimer->start()` into a private `void sendRegistration()` method.
-- [ ] Call `sendRegistration()` at the end of the ACK handler (after storing caps and sending `CAP END`).
-- [ ] Call `sendRegistration()` in the no-caps branch of the LS handler (after sending `CAP END`).
-- [ ] Call `sendRegistration()` in the NAK handler (after sending `CAP END`).
-- [ ] Delete the dead `else if (action == "END")` branch.
+- [x] Move PASS + NICK + USER + `m_pingTimer->start()` into a private `void sendRegistration()` method.
+- [x] Call `sendRegistration()` at the end of the ACK handler (after storing caps and sending `CAP END`).
+- [x] Call `sendRegistration()` in the no-caps branch of the LS handler (after sending `CAP END`).
+- [x] Call `sendRegistration()` in the NAK handler (after sending `CAP END`).
+- [x] Delete the dead `else if (action == "END")` branch.
 
 ---
 

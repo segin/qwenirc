@@ -108,6 +108,7 @@ private:
     void sendCtcpVersionReply(const QString& target);
     bool isCtcpMessage(const QString& message);
     void parseCtcpMessage(const QString& message, QString& command, QString& text);
+    void sendRegistration();
 
     QAbstractSocket* m_socket;
     QString m_host;
@@ -123,6 +124,7 @@ private:
     QTimer* m_pingTimer;
     QStringList m_capSupported;
     QSet<QString> m_activeCaps;
+    QSet<QString> m_serverCaps;
     QByteArray m_lineBuffer;
     int m_nickRetries = 0;
     bool m_waitingCaps = false;

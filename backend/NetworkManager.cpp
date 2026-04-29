@@ -670,35 +670,51 @@ void NetworkManager::handleCapCommand(const QStringList& params) {
     QString action = params[1].toUpper();
 
     if (action == "LS") {
-        // Server responds to CAP LS 302 with a list of available caps
-        // Format: * :cap1 cap2 cap3 ...
-        QStringList caps = params.mid(2);
-        QSet<QString> availableCaps;
-        for (const auto& cap : caps) {
-            QString capName = cap;
-            if (capName.startsWith('*')) {
-                capName = capName.mid(1);
-            }
-            availableCaps.insert(capName);
+        QStringList rawParams = params.mid(2);
+        QString firstParam = rawParams.value(0, "");
+        bool isMultiline = (firstParam == "*");
+        
+        if (isMultiline) {
+            m_serverCaps = QSet<QString>();
         }
         
-        // Intersect with our supported caps
+        QSet<QString> availableCaps;
+        for (const auto& param : rawParams) {
+            if (param == "*") continue;
+            QStringList tokens = param.split(' ', Qt::SkipEmptyParts);
+            for (const auto& token : tokens) {
+                QString capName = token;
+                if (capName.startsWith('*')) {
+                    capName = capName.mid(1);
+                }
+                availableCaps.insert(capName);
+            }
+        }
+        
+        m_serverCaps.unite(availableCaps);
+        
+        if (isMultiline) return;
+        
+        // Final LS response - process accumulated caps
+        QSet<QString> allCaps = m_serverCaps;
+        m_serverCaps = QSet<QString>();
+        
         QStringList acceptedCaps;
         for (const auto& cap : m_capSupported) {
-            if (availableCaps.contains(cap)) {
+            if (allCaps.contains(cap)) {
                 acceptedCaps.append(cap);
             }
         }
         
         m_waitingCaps = false;
         
-        // Only send CAP REQ if we have caps to request
         if (!acceptedCaps.isEmpty()) {
             sendCommand("CAP", QStringList() << "REQ" << acceptedCaps.join(' '));
             emit serverChannelMessage("Capabilities requested: " + acceptedCaps.join(", "));
         } else {
             emit serverChannelMessage("No supported capabilities available");
             sendRaw("CAP END\r\n");
+            sendRegistration();
         }
     } else if (action == "ACK") {
         // Server acknowledges requested capabilities
@@ -707,6 +723,10 @@ void NetworkManager::handleCapCommand(const QStringList& params) {
             QString capName = cap;
             if (capName.endsWith(':')) {
                 capName = capName.left(capName.size() - 1);
+            } else if (capName.startsWith('-')) {
+                capName = capName.mid(1);
+                m_activeCaps.remove(capName);
+                continue;
             }
             m_activeCaps.insert(capName);
         }
@@ -716,19 +736,11 @@ void NetworkManager::handleCapCommand(const QStringList& params) {
         }
         emit serverChannelMessage("Capabilities acknowledged: " + activeCapsList.join(", "));
         sendRaw("CAP END\r\n");
+        sendRegistration();
     } else if (action == "NAK") {
         emit serverChannelMessage("Capabilities rejected");
         sendRaw("CAP END\r\n");
-    } else if (action == "END") {
-        // CAP END received - now register with server
-        if (!m_pass.isEmpty()) {
-            sendCommand("PASS", QStringList() << m_pass);
-        }
-        m_username = m_nick;
-        m_realname = m_nick;
-        sendCommand("NICK", QStringList() << m_nick);
-        sendCommand("USER", QStringList() << m_username << "8" << "*" << m_realname);
-        m_pingTimer->start();
+        sendRegistration();
     }
 }
 
@@ -925,4 +937,15 @@ void NetworkManager::sendCommand(const QString& cmd, const QStringList& params) 
 
     line += "\r\n";
     sendRaw(line);
+}
+
+void NetworkManager::sendRegistration() {
+    if (!m_pass.isEmpty()) {
+        sendCommand("PASS", QStringList() << m_pass);
+    }
+    m_username = m_nick;
+    m_realname = m_nick;
+    sendCommand("NICK", QStringList() << m_nick);
+    sendCommand("USER", QStringList() << m_username << "8" << "*" << m_realname);
+    m_pingTimer->start();
 }
