@@ -87,6 +87,7 @@ private slots:
     void onError(QAbstractSocket::SocketError error);
     void onSslErrors(const QList<QSslError>& errors);
     void onPingTimeout();
+    void onCapReqTimeout();
 
 private:
     void parseLine(const QString& line);
@@ -97,13 +98,13 @@ private:
     void handleJoin(const QString& prefix, const QStringList& params, const QString& serverTime = {});
     void handlePart(const QString& prefix, const QStringList& params, const QString& serverTime = {});
     void handleMode(const QString& prefix, const QStringList& params);
-    void handleTopic(const QString& prefix, const QStringList& params);
+    void handleTopic(const QString& prefix, const QStringList& params, const QString& serverTime = {});
     void handleQuit(const QString& prefix, const QStringList& params, const QString& serverTime = {});
     void handleKick(const QString& prefix, const QStringList& params, const QString& serverTime = {});
     void handleCapCommand(const QStringList& params);
-    void handleNumericReply(const QString& numeric, const QString& prefix, const QStringList& params);
+    void handleNumericReply(const QString& numeric, const QString& prefix, const QStringList& params, const QString& serverTime = {});
 
-    void sendRaw(const QString& data);
+    virtual void sendRaw(const QString& data);
     void sendCommand(const QString& cmd, const QStringList& params);
     void sendCtcpVersionReply(const QString& target);
     bool isCtcpMessage(const QString& message);
@@ -126,11 +127,14 @@ private:
     QSet<QString> m_activeCaps;
     QSet<QString> m_serverCaps;
     QByteArray m_lineBuffer;
+    QTimer* m_capReqTimer;
     int m_nickRetries = 0;
     QMap<QString, QString> m_isupport;
 
     QChar extractModePrefix(const QString& nick);
     QSet<QChar> m_prefixSymbols;
+
+    friend class TestIrcParser;
 };
 
 #endif // NETWORKMANAGER_H

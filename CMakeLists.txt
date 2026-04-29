@@ -72,6 +72,8 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang
     endif()
 endif()
 
+add_subdirectory(tests)
+
 install(TARGETS qwenirc
     RUNTIME DESTINATION bin
     BUNDLE DESTINATION .

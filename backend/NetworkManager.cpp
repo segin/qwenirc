@@ -6,6 +6,7 @@ NetworkManager::NetworkManager(QObject* parent)
     , m_socket(new QTcpSocket(this))
     , m_state(Disconnected)
     , m_pingTimer(new QTimer(this))
+    , m_capReqTimer(new QTimer(this))
     , m_prefixSymbols({'@', '%', '+'})
 {
     connect(m_socket, &QAbstractSocket::connected, this, &NetworkManager::onConnected);
@@ -16,6 +17,8 @@ NetworkManager::NetworkManager(QObject* parent)
 
     connect(m_pingTimer, &QTimer::timeout, this, &NetworkManager::onPingTimeout);
     m_pingTimer->setInterval(3 * 60 * 1000);
+
+    connect(m_capReqTimer, &QTimer::timeout, this, &NetworkManager::onCapReqTimeout);
 
     m_capSupported = {"sasl", "server-time", "echo-message", "multi-prefix", "away-notify", "account-notify"};
 }
@@ -272,6 +275,28 @@ void NetworkManager::onSslErrors(const QList<QSslError>& errors) {
         m_pingTimer->start();
     }
 
+    void NetworkManager::onCapReqTimeout() {
+        if (m_serverCaps.isEmpty()) return;
+        
+        QStringList acceptedCaps;
+        for (const auto& cap : m_capSupported) {
+            if (m_serverCaps.contains(cap)) {
+                acceptedCaps.append(cap);
+            }
+        }
+        
+        if (!acceptedCaps.isEmpty()) {
+            sendCommand("CAP", QStringList() << "REQ" << acceptedCaps.join(' '));
+            emit serverChannelMessage("Capabilities requested: " + acceptedCaps.join(", "));
+        } else {
+            emit serverChannelMessage("No supported capabilities available");
+            sendRaw("CAP END\r\n");
+            sendRegistration();
+        }
+        m_serverCaps = QSet<QString>();
+        m_capReqTimer->stop();
+    }
+
 void NetworkManager::parseLine(const QString& line) {
     // Handle IRCv3 message tags: @key1=val1;key2=val2 :nick!id@host CMD params
     QString serverTime;
@@ -372,7 +397,7 @@ void NetworkManager::parseMessage(const QString& line, const QString& serverTime
     } else if (cmd == "MODE") {
         handleMode(prefix, params);
     } else if (cmd == "TOPIC") {
-        handleTopic(prefix, params);
+        handleTopic(prefix, params, serverTime);
     } else if (cmd == "QUIT") {
         handleQuit(prefix, params, serverTime);
     } else if (cmd == "NOTICE") {
@@ -385,7 +410,7 @@ void NetworkManager::parseMessage(const QString& line, const QString& serverTime
         bool ok;
         long num = cmd.toLong(&ok);
         if (ok && num >= 1 && num <= 999) {
-            handleNumericReply(QString::number(num), prefix, params);
+            handleNumericReply(QString::number(num), prefix, params, serverTime);
         } else {
             QString sender = prefix.isEmpty() ? "Server" : prefix.section('!', 0, 0);
             emit serverChannelMessage("[" + sender + "] " + cmd + " " + params.join(' '));
@@ -606,7 +631,7 @@ void NetworkManager::handleMode(const QString& prefix, const QStringList& params
     emit channelMessage(target, msg);
 }
 
-void NetworkManager::handleTopic(const QString& prefix, const QStringList& params) {
+void NetworkManager::handleTopic(const QString& prefix, const QStringList& params, const QString& serverTime) {
     if (params.size() < 2) return;
 
     QString chanName = params[0];
@@ -619,7 +644,12 @@ void NetworkManager::handleTopic(const QString& prefix, const QStringList& param
         ch->setTopic(topic);
     }
 
-    IRCMessage msg(MessageType::Topic, topic, prefix.section('!', 0, 0));
+       IRCMessage msg(MessageType::Topic, topic, prefix.section('!', 0, 0));
+        if (!serverTime.isEmpty()) {
+            QString cleanTime = serverTime;
+            if (cleanTime.endsWith('Z')) cleanTime.chop(1);
+            msg.setTimestamp(QDateTime::fromString(cleanTime, Qt::ISODate));
+        }
     emit channelMessage(chanName, msg);
 }
 
@@ -677,12 +707,6 @@ void NetworkManager::handleCapCommand(const QStringList& params) {
 
     if (action == "LS") {
         QStringList rawParams = params.mid(2);
-        QString firstParam = rawParams.value(0, "");
-        bool isMultiline = (firstParam == "*");
-        
-        if (isMultiline) {
-            m_serverCaps = QSet<QString>();
-        }
         
         QSet<QString> availableCaps;
         for (const auto& param : rawParams) {
@@ -692,6 +716,8 @@ void NetworkManager::handleCapCommand(const QStringList& params) {
                 QString capName = token;
                 if (capName.startsWith('*')) {
                     capName = capName.mid(1);
+                } else if (capName.startsWith(':')) {
+                    capName = capName.mid(1);
                 }
                 availableCaps.insert(capName);
             }
@@ -699,27 +725,8 @@ void NetworkManager::handleCapCommand(const QStringList& params) {
         
         m_serverCaps.unite(availableCaps);
         
-        if (isMultiline) return;
-        
-        // Final LS response - process accumulated caps
-        QSet<QString> allCaps = m_serverCaps;
-        m_serverCaps = QSet<QString>();
-        
-        QStringList acceptedCaps;
-        for (const auto& cap : m_capSupported) {
-            if (allCaps.contains(cap)) {
-                acceptedCaps.append(cap);
-            }
-        }
-        
-        if (!acceptedCaps.isEmpty()) {
-            sendCommand("CAP", QStringList() << "REQ" << acceptedCaps.join(' '));
-            emit serverChannelMessage("Capabilities requested: " + acceptedCaps.join(", "));
-        } else {
-            emit serverChannelMessage("No supported capabilities available");
-            sendRaw("CAP END\r\n");
-            sendRegistration();
-        }
+        // Start/restart timer to send REQ after all LS lines are received
+        m_capReqTimer->start(50);
     } else if (action == "ACK") {
         // Server acknowledges requested capabilities
         QStringList caps = params.mid(2);
@@ -753,7 +760,7 @@ void NetworkManager::handleCapCommand(const QStringList& params) {
     }
 }
 
-void NetworkManager::handleNumericReply(const QString& numeric, [[maybe_unused]] const QString& prefix, const QStringList& params) {
+void NetworkManager::handleNumericReply(const QString& numeric, [[maybe_unused]] const QString& prefix, const QStringList& params, const QString& serverTime) {
     bool ok;
     long num = numeric.toLong(&ok);
     if (!ok) return;
@@ -802,6 +809,13 @@ void NetworkManager::handleNumericReply(const QString& numeric, [[maybe_unused]]
             topic = topic.mid(1);
         }
         emit channelTopic(channel, topic);
+        IRCMessage msg(MessageType::Topic, topic, prefix.section('!', 0, 0));
+        if (!serverTime.isEmpty()) {
+            QString cleanTime = serverTime;
+            if (cleanTime.endsWith('Z')) cleanTime.chop(1);
+            msg.setTimestamp(QDateTime::fromString(cleanTime, Qt::ISODate));
+        }
+        emit channelMessage(channel, msg);
     } else if (num == 333) {
         QString channel = params.value(1, "");
         QString timestamp = params.value(2, "");
@@ -828,7 +842,22 @@ void NetworkManager::handleNumericReply(const QString& numeric, [[maybe_unused]]
         QString channel = params.value(1, "");
     } else if (num == 353) {
         QString channel = params.value(1, "");
-        QString users = params.value(2, "");
+        QString users;
+        int paramIdx = 2;
+        // Handle various 353 formats:
+        //   ":@op +voice user" → channel = "=#chan", users = ":@op +voice user"
+        //   "= #chan" → channel = "=", users = "#chan" (with space around =)
+        //   "#chan" → channel = "#chan", users = "users"
+        if (channel == "=") {
+            channel = params.value(2, "");
+            paramIdx = 3;
+        } else if (channel.startsWith('=')) {
+            channel = channel.mid(1);
+        }
+        users = params.value(paramIdx, "");
+        if (users.startsWith(':')) {
+            users = users.mid(1);
+        }
         QStringList userParts = users.split(' ');
         QStringList nonEmpty;
         for (const QString& u : userParts) {

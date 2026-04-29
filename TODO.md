@@ -119,16 +119,10 @@ Status: `[ ]` open · `[x]` done
 - Given `applyMode("+ov", ["nick1", "nick2"], "setter")`, verify both users updated.
 - Given `applyMode("+mb", ["key", "ban!mask"], "setter")`, verify no crash and no user prefix change.
 
-- [ ] Rewrite the loop with a separate `bool adding = true` tracking variable:
-  ```
-  for each char c in modeStr:
-      if c == '+': adding = true; continue
-      if c == '-': adding = false; continue
-      // c is a mode letter — consume param if applicable
-  ```
-- [ ] Map mode letter to prefix symbol using `m_isupport["PREFIX"]` (default `(ohv)@%+`); parse the `(letters)symbols` format to build the mapping.
-- [ ] Set `user->setUserPrefix(adding ? symbol : "")` where `symbol` is looked up from the mapping.
-- [ ] For non-user modes that take a param (`k`, `l`, `b`, `e`, `I`), consume but discard the param.
+- [x] Rewrite the loop with a separate `bool adding = true` tracking variable:
+- [x] Map mode letter to prefix symbol using `m_isupport["PREFIX"]` (default `(ohv)@%+`); parse the `(letters)symbols` format to build the mapping.
+- [x] Set `user->setUserPrefix(adding ? symbol : "")` where `symbol` is looked up from the mapping.
+- [x] For non-user modes that take a param (`k`, `l`, `b`, `e`, `I`), consume but discard the param.
 
 ---
 
@@ -569,9 +563,9 @@ Already covered under REQ-MODE-02.
 
 ### REQ-TEST-02 · P3 — Unit tests for IRCUserModel
 
-- [ ] Test: `addUser` with duplicate nick (case-insensitive) does not insert duplicate.
-- [ ] Test: `removeUser("alice")` removes `@alice` from display list.
-- [ ] Test: `setUsers` populates model and emits `modelReset`.
+- [x] Test: `addUser` with duplicate nick (case-insensitive) does not insert duplicate.
+- [x] Test: `removeUser("alice")` removes `@alice` from display list.
+- [x] Test: `setUsers` populates model and emits `modelReset`.
 
 ### REQ-TEST-03 · P3 — Unit tests for IRCMessage rendering
 
