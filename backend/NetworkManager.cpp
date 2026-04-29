@@ -514,6 +514,11 @@ void NetworkManager::handleNick(const QString& prefix, const QStringList& params
     for (auto it = m_channels.begin(); it != m_channels.end(); ++it) {
         IRCChannel* ch = it.value();
         if (ch->findUser(oldNick) != nullptr) {
+            IRCUser* user = ch->findUser(oldNick);
+            QString ident = user->ident();
+            QString host = user->host();
+            ch->removeUser(oldNick);
+            ch->addUser(IRCUser(newNick, ident, host));
             emit channelMessage(it.key(), msg);
         }
     }

@@ -164,7 +164,7 @@ Status: `[ ]` open · `[x]` done
 - Verify `IRCChannel::findUser("alice_")` returns a valid user.
 - Verify `userChangedNick` signal is still emitted once.
 
-- [ ] Inside the `handleNick` channel loop, after the `findUser` check: copy the old user's ident/host, call `ch->removeUser(oldNick)`, construct `IRCUser(newNick, ident, host)` and call `ch->addUser(...)`.
+- [x] Inside the `handleNick` channel loop, after the `findUser` check: copy the old user's ident/host, call `ch->removeUser(oldNick)`, construct `IRCUser(newNick, ident, host)` and call `ch->addUser(...)`.
 
 ---
 
