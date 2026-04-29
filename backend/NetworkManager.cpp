@@ -626,7 +626,7 @@ void NetworkManager::handleQuit(const QString& prefix, const QStringList& params
     QString nick = prefix.section('!', 0, 0);
     QString reason = params.isEmpty() ? "" : params[0];
 
-    IRCMessage msg(MessageType::Quit, "Quit", nick);
+    IRCMessage msg(MessageType::Quit, reason, nick);
     if (!serverTime.isEmpty()) {
         msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate));
     }

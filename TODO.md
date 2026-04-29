@@ -179,7 +179,7 @@ Status: `[ ]` open · `[x]` done
 - Given `:alice QUIT :Gone to lunch`, verify displayed message contains "Gone to lunch".
 - Given `:alice QUIT` (no reason), verify message is "alice quit" without a reason clause.
 
-- [ ] Change `IRCMessage msg(MessageType::Quit, "Quit", nick)` to `IRCMessage msg(MessageType::Quit, reason, nick)`.
+- [x] Change `IRCMessage msg(MessageType::Quit, "Quit", nick)` to `IRCMessage msg(MessageType::Quit, reason, nick)`.
 
 ---
 
