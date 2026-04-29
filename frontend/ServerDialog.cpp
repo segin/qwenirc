@@ -7,7 +7,6 @@
 
 ServerDialog::ServerDialog(QWidget* parent)
     : QDialog(parent)
-    , m_channel("")
 {
     setWindowTitle("Connect to IRC");
     setMinimumSize(450, 360);

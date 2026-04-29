@@ -47,7 +47,6 @@ private:
     QPushButton* m_connectBtn;
     QPushButton* m_cancelBtn;
     QCheckBox* m_tlsCheckBox;
-    QString m_channel;
-};
+ };
 
 #endif // SERVERDIALOG_H

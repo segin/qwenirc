@@ -524,7 +524,7 @@ Already covered under REQ-MODE-02.
 
 ### REQ-DEADMEMBER-01 · P4 — Remove `m_channel` dead member from `ServerDialog`
 
-- [ ] Remove `QString m_channel` from `ServerDialog.h` and its initialiser from the constructor.
+- [x] Remove `QString m_channel` from `ServerDialog.h` and its initialiser from the constructor.
 
 ---
 
