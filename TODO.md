@@ -308,7 +308,7 @@ Status: `[ ]` open · `[x]` done
 
 **EARS:** When constructing a Quit message for display, the system shall use `reason` as the `m_text` field rather than the hardcoded string `"Quit"`.
 
-- [ ] Already addressed in REQ-QUIT-01 above.
+- [x] Already addressed in REQ-QUIT-01 above.
 
 ---
 
@@ -555,11 +555,11 @@ Already covered under REQ-MODE-02.
 
 **User story:** As a developer, I want parser tests so that numeric-reply regressions are caught before they reach users.
 
-- [ ] Add `tests/` directory with `CMakeLists.txt` using `find_package(Qt6 REQUIRED COMPONENTS Test)`.
-- [ ] Test: `:server 353 me = #chan :@op +voice user` → channel `"#chan"`, users `["op","voice","user"]` with correct prefixes.
-- [ ] Test: `@time=2024-01-01T12:00:00Z :srv 332 me #chan :topic` → timestamp parsed, channel `"#chan"`, topic `"topic"`.
-- [ ] Test: `:srv PING :pingtoken` → `PONG :pingtoken` sent, no user message emitted.
-- [ ] Test: `CAP * LS :sasl server-time echo-message` → intersection computed correctly, `CAP REQ` sent with correct cap list.
+- [x] Add `tests/` directory with `CMakeLists.txt` using `find_package(Qt6 REQUIRED COMPONENTS Test)`.
+- [x] Test: `:server 353 me = #chan :@op +voice user` → channel `"#chan"`, users `["op","voice","user"]` with correct prefixes.
+- [x] Test: `@time=2024-01-01T12:00:00Z :srv 332 me #chan :topic` → timestamp parsed, channel `"#chan"`, topic `"topic"`.
+- [x] Test: `:srv PING :pingtoken` → `PONG :pingtoken` sent, no user message emitted.
+- [x] Test: `CAP * LS :sasl server-time echo-message` → intersection computed correctly, `CAP REQ` sent with correct cap list.
 
 ### REQ-TEST-02 · P3 — Unit tests for IRCUserModel
 
