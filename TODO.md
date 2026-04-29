@@ -518,7 +518,7 @@ Already covered under REQ-MODE-02.
 
 **EARS:** The build system shall not enable processing stages for file types that do not exist in the project.
 
-- [ ] Remove `set(CMAKE_AUTOUIC ON)` from `CMakeLists.txt` (no `.ui` files present).
+- [x] Remove `set(CMAKE_AUTOUIC ON)` from `CMakeLists.txt` (no `.ui` files present).
 
 ---
 
