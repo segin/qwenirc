@@ -91,15 +91,15 @@ Status: `[ ]` open · `[x]` done
 - 333: Given `:srv 333 me #chan setter 1234`, verify setter and timestamp are read correctly.
 - 005: Given `:srv 005 me CHANTYPES=# CASEMAPPING=rfc1459 :supported`, verify both tokens are stored in `m_isupport`.
 
-- [ ] **353 RPL_NAMREPLY:** `channel = params.value(2)`, `users = params.value(3)`.
-- [ ] **366 RPL_ENDOFNAMES:** `channel = params.value(1)`.
-- [ ] **332 RPL_TOPIC:** `channel = params.value(1)`, `topic = params.value(2)`.
-- [ ] **324 RPL_CHANNELMODEIS:** `channel = params.value(1)`, `mode = params.value(2)`.
-- [ ] **333 RPL_TOPICWHOTIME:** `channel = params.value(1)`, `setter = params.value(2)`, `ts = params.value(3)`.
-- [ ] **329 RPL_CREATIONTIME:** `channel = params.value(1)`, `ts = params.value(2)`.
-- [ ] **331 RPL_NOTOPIC:** `channel = params.value(1)`.
-- [ ] **367/368 ban list:** shift all indices by +1.
-- [ ] **005 ISUPPORT:** start loop at `i = 1`, not `i = 2`.
+- [x] **353 RPL_NAMREPLY:** `channel = params.value(1)`, `users = params.value(2)`.
+- [x] **366 RPL_ENDOFNAMES:** `channel = params.value(1)`.
+- [x] **332 RPL_TOPIC:** `channel = params.value(1)`, `topic = params.value(2)`.
+- [x] **324 RPL_CHANNELMODEIS:** `channel = params.value(1)`, `mode = params.value(2)`.
+- [x] **333 RPL_TOPICWHOTIME:** `channel = params.value(1)`, `timestamp = params.value(2)`, `setter = params.value(3)`.
+- [x] **329 RPL_CREATIONTIME:** `channel = params.value(1)`, `ts = params.value(2)`.
+- [x] **331 RPL_NOTOPIC:** `channel = params.value(1)`.
+- [x] **367/368 ban list:** channel index shifted to params.value(1).
+- [x] **005 ISUPPORT:** start loop at `i = 1`, skip trailing `:` token.
 
 ---
 

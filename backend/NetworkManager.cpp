@@ -764,45 +764,34 @@ void NetworkManager::handleNumericReply(const QString& numeric, [[maybe_unused]]
             m_currentChannel.clear();
         }
     } else if (num == 366) {
-        QString channel = params.value(0, "");
+        QString channel = params.value(1, "");
         emit namesComplete(channel);
         sendCommand("TOPIC", QStringList() << channel);
         sendCommand("MODE", QStringList() << channel);
-        emit serverChannelMessage("RPL 366 (End of channel name): " + channel);
     } else if (num == 324) {
-        if (params.size() >= 2) {
-            QString channel = params.value(0, "");
-            QString mode = params.value(1, "");
+        if (params.size() >= 3) {
+            QString channel = params.value(1, "");
+            QString mode = params.value(2, "");
             emit channelMode(channel, mode);
-            emit serverChannelMessage("RPL 324 (Channel mode): " + channel + " " + mode);
         }
     } else if (num == 332) {
-        QString channel = params.value(0, "");
-        QString topic = params.value(1, "");
+        QString channel = params.value(1, "");
+        QString topic = params.value(2, "");
         if (topic.startsWith(':')) {
             topic = topic.mid(1);
         }
         emit channelTopic(channel, topic);
-        emit serverChannelMessage("RPL 332 (Topic): " + channel + " " + topic);
     } else if (num == 333) {
-        QString channel = params.value(0, "");
-        QString timestamp = params.value(1, "");
-        QString setter = params.value(2, "");
-        emit serverChannelMessage("RPL 333 (Topic set by): " + channel + " " + setter + " at " + timestamp);
+        QString channel = params.value(1, "");
+        QString timestamp = params.value(2, "");
+        QString setter = params.value(3, "");
     } else if (num == 329) {
-        QString channel = params.value(0, "");
-        QString timestamp = params.value(1, "");
-        emit serverChannelMessage("RPL 329 (Channel created): " + channel + " at " + timestamp);
+        QString channel = params.value(1, "");
+        QString timestamp = params.value(2, "");
     } else if (num == 367) {
-        QString channel = params.value(0, "");
-        if (params.size() >= 2) {
-            emit serverChannelMessage("RPL 367 (Ban list for " + channel + "): " + params.mid(1).join(' '));
-        } else {
-            emit serverChannelMessage("RPL 367 (End of ban list for " + channel + ")");
-        }
+        QString channel = params.value(1, "");
     } else if (num == 368) {
-        QString channel = params.value(0, "");
-        emit serverChannelMessage("RPL 368 (End of ban exceptions for " + channel + ")");
+        QString channel = params.value(1, "");
     } else if (num == 401) {
         QString missingNick = params.value(1, "");
         emit serverError("No such nick: " + missingNick);
@@ -815,11 +804,10 @@ void NetworkManager::handleNumericReply(const QString& numeric, [[maybe_unused]]
             setNick(m_nick + "_");
         }
      } else if (num == 315) {
-        QString channel = params.value(0, "");
-        emit serverChannelMessage("RPL 315 (End of WHO for " + channel + ")");
+        QString channel = params.value(1, "");
     } else if (num == 353) {
-        QString channel = params.value(0, "");
-        QString users = params.value(1, "");
+        QString channel = params.value(1, "");
+        QString users = params.value(2, "");
         QStringList userParts = users.split(' ');
         QStringList nonEmpty;
         for (const QString& u : userParts) {
@@ -846,22 +834,20 @@ void NetworkManager::handleNumericReply(const QString& numeric, [[maybe_unused]]
         emit namesReceived(channel, userList);
         emit serverChannelMessage("RPL 353 (Users list): " + channel + " " + users);
     } else if (num == 331) {
-        QString channel = params.value(0, "");
-        emit serverChannelMessage("RPL 331 (No topic for " + channel + ")");
+        QString channel = params.value(1, "");
     } else if (num >= 400 && num <= 420) {
-        QString text2 = params.value(1, "");
+        QString text2 = params.value(2, "");
         if (text2.startsWith(':')) {
             text2 = text2.mid(1);
         }
-        emit serverChannelMessage("RPL " + QString::number(num) + ": " + text2);
     } else if (num >= 421 && num <= 499) {
-        QString errText = params.value(1, "");
+        QString errText = params.value(2, "");
         if (errText.startsWith(':')) {
             errText = errText.mid(1);
         }
         emit serverError("RPL " + QString::number(num) + ": " + errText);
     } else if (num == 5) {
-        for (int i = 2; i < params.size(); ++i) {
+        for (int i = 1; i < params.size(); ++i) {
             QString token = params[i];
             if (token.contains('=')) {
                 int eqPos = token.indexOf('=');
