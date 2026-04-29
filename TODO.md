@@ -397,7 +397,7 @@ Status: `[ ]` open · `[x]` done
 **Test requirements:**
 - Hide user list panel, join a channel, re-show panel — verify user list is populated.
 
-- [ ] Remove the `|| !m_userList->isVisible()` guard from `onNamesReceived`.
+  - [x] Remove the `&& m_userList->isVisible()` guard from `onNamesReceived`, so NAMES are processed whenever the channel matches.
 
 ---
 

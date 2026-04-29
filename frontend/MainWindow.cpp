@@ -452,7 +452,7 @@ ChannelTab* MainWindow::findChannelTab(const QString& name) {
 
 void MainWindow::onNamesReceived(const QString& channel, const QList<IRCUser>& users) {
     Q_UNUSED(channel);
-    if (channel == m_currentChannel && m_userList->isVisible()) {
+    if (channel == m_currentChannel) {
         m_userList->clear();
         for (const auto& user : users) {
             QString nick = user.nick();
