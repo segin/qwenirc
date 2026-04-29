@@ -358,8 +358,7 @@ void NetworkManager::parseMessage(const QString& line, const QString& serverTime
     }
 
     if (cmd == "PING") {
-        if (params.size() >= 1) {
-            emit serverChannelMessage("PONG: " + params[0]);
+       if (params.size() >= 1) {
             sendCommand("PONG", QStringList() << params[0]);
         }
     } else if (cmd == "CAP") {

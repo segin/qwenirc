@@ -270,7 +270,7 @@ Status: `[ ]` open · `[x]` done
 **Test requirements:**
 - Verify that receiving a PING from the server results in a PONG being sent and no message appearing in the server tab.
 
-- [ ] Remove `emit serverChannelMessage("PONG: " + params[0]);` from the PING handler.
+- [x] Remove `emit serverChannelMessage("PONG: " + params[0]);` from the PING handler.
 
 ---
 
