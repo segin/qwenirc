@@ -10,6 +10,7 @@ NetworkManager::NetworkManager(QObject* parent)
     , m_state(Disconnected)
     , m_pingTimer(new QTimer(this))
     , m_waitingCaps(false)
+    , m_prefixSymbols({'@', '%', '+'})
 {
     connect(m_socket, &QAbstractSocket::connected, this, &NetworkManager::onConnected);
     connect(m_socket, &QAbstractSocket::disconnected, this, &NetworkManager::onDisconnected);
@@ -873,6 +874,16 @@ void NetworkManager::handleNumericReply(const QString& numeric, [[maybe_unused]]
                 QString key = token.left(eqPos);
                 QString value = token.mid(eqPos + 1);
                 m_isupport.insert(key, value);
+                if (key == "PREFIX") {
+                    m_prefixSymbols.clear();
+                    int parenEnd = value.indexOf(')');
+                    if (parenEnd >= 0) {
+                        QString symbols = value.mid(parenEnd + 1);
+                        for (QChar c : symbols) {
+                            m_prefixSymbols.insert(c);
+                        }
+                    }
+                }
             }
         }
         emit serverChannelMessage("RPL 005 (ISUPPORT): " + params.mid(2).join(' '));
@@ -886,21 +897,19 @@ void NetworkManager::handleNumericReply(const QString& numeric, [[maybe_unused]]
 }
 
 QChar NetworkManager::extractModePrefix(const QString& nick) {
-    const QString& prefixStr = m_isupport.value("PREFIX", "@&*(op:s t: v: a");
-    QChar result;
-    for (int i = 0; i < prefixStr.length(); ++i) {
-        QChar c = prefixStr[i];
-        if (!c.isLetterOrNumber() && c != '(' && c != ')' && c != '*') {
-            result = c;
-            break;
-        }
+    if (nick.isEmpty()) {
+        return {};
     }
-    for (int i = 0; i < prefixStr.length(); ++i) {
-        if (nick.startsWith(prefixStr[i])) {
-            return prefixStr[i];
-        }
+
+    if (m_prefixSymbols.isEmpty()) {
+        return {};
     }
-    return result;
+
+    if (m_prefixSymbols.contains(nick[0])) {
+        return nick[0];
+    }
+
+    return {};
 }
 
 void NetworkManager::sendRaw(const QString& data) {

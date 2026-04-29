@@ -131,6 +131,7 @@ private:
     QMap<QString, QString> m_isupport;
 
     QChar extractModePrefix(const QString& nick);
+    QSet<QChar> m_prefixSymbols;
 };
 
 #endif // NETWORKMANAGER_H

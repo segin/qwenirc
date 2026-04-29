@@ -287,9 +287,9 @@ Status: `[ ]` open · `[x]` done
 - Given `PREFIX=(ov)@+`, verify `extractModePrefix("charlie")` returns null/empty.
 - Given no ISUPPORT PREFIX, verify default of `@%+` is used.
 
-- [ ] Parse `PREFIX=(letters)symbols`: extract the substring after `)` as the valid prefix chars.
-- [ ] Use a sensible default `"@%+"` when PREFIX is absent.
-- [ ] In `extractModePrefix(nick)`, check only whether `nick[0]` is in the symbols set.
+- [x] Parse `PREFIX=(letters)symbols`: extract the substring after `)` as the valid prefix chars.
+- [x] Use a sensible default `"@%+"` when PREFIX is absent.
+- [x] In `extractModePrefix(nick)`, check only whether `nick[0]` is in the symbols set.
 
 ---
 
