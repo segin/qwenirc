@@ -210,7 +210,7 @@ Status: `[ ]` open · `[x]` done
 **Test requirements:**
 - Verify that closing the server connection while a PING is in-flight does not emit `connectionLost` after `disconnected`.
 
-- [ ] Add `m_pongTimer->stop();` in `onDisconnected`.
+- [x] `m_pingTimer->stop()` is already present in `onDisconnected` (TODO used wrong variable name; actual timer is `m_pingTimer`).
 
 ---
 
