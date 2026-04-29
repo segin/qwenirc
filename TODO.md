@@ -346,7 +346,7 @@ Status: `[ ]` open · `[x]` done
 **Test requirements:**
 - Verify that copying a message containing `<b>nick</b>` produces clipboard text like `[12:34:56] nick: message`, not HTML.
 
-- [ ] Strip HTML before placing on clipboard: use `QTextDocument doc; doc.setHtml(text); clipboard->setText(doc.toPlainText())`.
+- [x] Strip HTML before placing on clipboard: use `QTextDocument doc; doc.setHtml(text); clipboard->setText(doc.toPlainText())`.
 
 ---
 

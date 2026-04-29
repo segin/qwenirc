@@ -25,6 +25,7 @@ public:
     void setChatModel(QAbstractItemModel* model);
     void setChannelName(const QString& name);
     QString channelName() const { return m_channelName; }
+    void copySelectedText();
 
 signals:
     void messageSent(const QString& message);

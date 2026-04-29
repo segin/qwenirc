@@ -12,6 +12,7 @@
 #include <QTextBlock>
 #include <QTextLength>
 #include <QPalette>
+#include <QClipboard>
 
 class ChatItemDelegate : public QStyledItemDelegate {
 public:
@@ -148,4 +149,14 @@ void ChatWidget::scrollToBottom() {
             scroll->setValue(scroll->maximum());
         }
     }
+}
+
+void ChatWidget::copySelectedText() {
+    if (!m_chatList || !m_chatList->model()) return;
+    auto indexes = m_chatList->selectionModel()->selectedIndexes();
+    if (indexes.isEmpty()) return;
+    QString text = indexes.first().data(Qt::DisplayRole).toString();
+    QTextDocument doc;
+    doc.setHtml(text);
+    QApplication::clipboard()->setText(doc.toPlainText());
 }
