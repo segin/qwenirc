@@ -150,7 +150,7 @@ void NetworkManager::whois(const QString& nick) {
     sendCommand("WHOIS", QStringList() << nick);
 }
 
-NetworkManager::State NetworkManager::state() {
+NetworkManager::State NetworkManager::state() const {
     return m_state;
 }
 
@@ -269,11 +269,10 @@ void NetworkManager::onSslErrors(const QList<QSslError>& errors) {
     m_socket->disconnectFromHost();
 }
 
-  void NetworkManager::onPingTimeout() {
-        emit serverChannelMessage("PING: " + m_host);
-        sendRaw("PING :" + m_host + "\r\n");
-        m_pingTimer->start();
-    }
+void NetworkManager::onPingTimeout() {
+    sendRaw("PING :" + m_host + "\r\n");
+    m_pingTimer->start();
+}
 
     void NetworkManager::onCapReqTimeout() {
         if (m_serverCaps.isEmpty()) return;
@@ -405,7 +404,7 @@ void NetworkManager::parseMessage(const QString& line, const QString& serverTime
     } else if (cmd == "KICK") {
         handleKick(prefix, params, serverTime);
     } else if (cmd == "PONG") {
-        emit serverChannelMessage("PONG: " + params.join(' '));
+        // silently consume keepalive PONG
     } else {
         bool ok;
         long num = cmd.toLong(&ok);
@@ -609,6 +608,10 @@ void NetworkManager::handlePart(const QString& prefix, const QStringList& params
     if (ch) {
         ch->removeUser(nick);
         ch->addMessage(msg);
+    }
+
+    if (nick == m_nick) {
+        removeChannel(chanName);
     }
 }
 
