@@ -24,7 +24,7 @@ public:
     void removeUser(const QString& nick);
     void addMessage(const IRCMessage& msg);
     void clear();
-    void applyMode(const QString& modeStr, const QStringList& modeParams, const QString& setter);
+    void applyMode(const QString& modeStr, const QStringList& modeParams, const QString& setter, const QString& prefixSpec = "");
 
 private:
     static const int MAX_MESSAGES = 10000;

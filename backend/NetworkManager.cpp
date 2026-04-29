@@ -603,7 +603,8 @@ void NetworkManager::handleMode(const QString& prefix, const QStringList& params
 
     auto* ch = channel(target);
     if (ch) {
-        ch->applyMode(mode, modeParams, prefix.section('!', 0, 0));
+        QString prefixSpec = m_isupport.value("PREFIX", "(ohv)@%+");
+        ch->applyMode(mode, modeParams, prefix.section('!', 0, 0), prefixSpec);
     }
 
     IRCMessage msg(MessageType::Mode, mode + " " + modeParams.join(' '), prefix.section('!', 0, 0));

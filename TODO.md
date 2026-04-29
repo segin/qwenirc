@@ -489,7 +489,12 @@ Already covered under REQ-MODE-02.
 
 **Root cause:** `applyMode` (once fixed per REQ-MODE-01) must map mode letters to symbols using the PREFIX ISUPPORT mapping before calling `setUserPrefix`.
 
-- [ ] Ensure the mapping from mode letter → symbol happens in `NetworkManager::handleMode` or `IRCChannel::applyMode`, not in `IRCUserModel::data`.
+- [x] Rewrote `IRCChannel::applyMode` with a separate `bool adding` tracking variable.
+- [x] Parse PREFIX ISUPPORT mapping `(letters)symbols` to build mode-letter→symbol map; default `(ohv)@%+`.
+- [x] Set `user->setUserPrefix(adding ? QString(symbol) : QString())` where symbol is from the mapping.
+- [x] Non-user modes (`k`, `l`, `b`, `e`, `d`, `I`) consume and discard params.
+
+---
 
 ---
 
