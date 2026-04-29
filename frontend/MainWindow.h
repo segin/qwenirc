@@ -19,6 +19,7 @@
 #include <QStackedWidget>
 #include <QList>
 #include <QAbstractItemModel>
+#include <QRegularExpression>
 
 class MainWindow : public QMainWindow {
     Q_OBJECT

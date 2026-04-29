@@ -356,8 +356,11 @@ void MainWindow::onUserJoined(const QString& channel, const IRCUser& user) {
 void MainWindow::onUserLeft(const QString& channel, const QString& nick, const QString& reason) {
     Q_UNUSED(reason);
     if (channel == m_currentChannel) {
+        QRegularExpression re("[~&@%+]");
         for (int i = 0; i < m_userList->count(); ++i) {
-            if (m_userList->item(i)->text() == nick) {
+            QString text = m_userList->item(i)->text();
+            text.replace(re, "");
+            if (text == nick) {
                 m_userList->takeItem(i);
                 break;
             }

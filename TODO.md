@@ -240,7 +240,7 @@ Status: `[ ]` open · `[x]` done
 - Verify `+alice` is removed when `alice` parts.
 - Verify `alice` (no prefix) is removed when `alice` parts.
 
-- [ ] Change regex to `[~&@%+]` to include `@`.
+- [x] Change regex to `[~&@%+]` to include `@`.
 
 ---
 
