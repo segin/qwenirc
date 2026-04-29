@@ -569,9 +569,9 @@ Already covered under REQ-MODE-02.
 
 ### REQ-TEST-03 · P3 — Unit tests for IRCMessage rendering
 
-- [ ] Test: `coloredText()` for `MessageType::Message` with nick `<b>nick</b>` — verify `<b>` is HTML-escaped in output.
-- [ ] Test: `formattedText()` for `MessageType::Quit` with non-empty reason includes the reason.
-- [ ] Test: `formattedText()` for `MessageType::TopicSet` uses `%1` placeholder correctly.
+- [x] Test: `coloredText()` for `MessageType::Message` with nick `<b>nick</b>` — verify `<b>` is HTML-escaped in output.
+- [x] Test: `formattedText()` for `MessageType::Quit` with non-empty reason includes the reason.
+- [x] Test: `formattedText()` for `MessageType::TopicSet` uses `%1` placeholder correctly.
 
 ---
 

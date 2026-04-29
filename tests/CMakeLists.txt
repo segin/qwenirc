@@ -30,8 +30,15 @@ add_executable(irc_user_model_tests
     ../backend/IRCMessageModel.h
 )
 
+add_executable(irc_message_tests
+    test_irc_message.cpp
+    ../backend/IRCMessage.cpp
+    ../backend/IRCMessage.h
+)
+
 target_include_directories(irc_parser_tests PRIVATE ../backend)
 target_include_directories(irc_user_model_tests PRIVATE ../backend)
+target_include_directories(irc_message_tests PRIVATE ../backend)
 
 target_link_libraries(irc_parser_tests PRIVATE
     Qt6::Core
@@ -47,5 +54,11 @@ target_link_libraries(irc_user_model_tests PRIVATE
     Qt6::Test
 )
 
+target_link_libraries(irc_message_tests PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+
 add_test(NAME irc_parser_tests COMMAND irc_parser_tests)
 add_test(NAME irc_user_model_tests COMMAND irc_user_model_tests)
+add_test(NAME irc_message_tests COMMAND irc_message_tests)
