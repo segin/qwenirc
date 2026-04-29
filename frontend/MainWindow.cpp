@@ -49,9 +49,8 @@ MainWindow::MainWindow(QWidget* parent)
     , m_channelMenu(nullptr)
     , m_userMenu(nullptr)
     , m_toolBar(nullptr)
-    ,   m_statusBar(nullptr)
+   , m_statusBar(nullptr)
     , m_mainSplitter(nullptr)
-    , m_channelModel(nullptr)
     , m_currentChannel("")
     , m_serverInfo("")
     , m_disconnectAction(nullptr)
@@ -75,7 +74,6 @@ MainWindow::~MainWindow() {
 
 void MainWindow::initializeUI() {
     m_network = new NetworkManager(this);
-    m_channelModel = new IRCChannelModel(this);
 
      // Central widget with vertical layout
     QWidget* centralWidget = new QWidget(this);

@@ -8,7 +8,6 @@
 #include <QMainWindow>
 #include <QTabWidget>
 #include <QListWidget>
-#include <QListView>
 #include <QMenuBar>
 #include <QMenu>
 #include <QToolBar>
@@ -73,7 +72,6 @@ private:
     QSplitter* m_mainSplitter;
     QMap<QString, IRCMessageModel*> m_channelModels;
     QMap<QString, IRCMessageModel*> m_queryModels;
-    IRCChannelModel* m_channelModel;
     QString m_currentChannel;
     QString m_serverInfo;
     QAction* m_disconnectAction;

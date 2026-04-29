@@ -440,7 +440,7 @@ Status: `[ ]` open · `[x]` done
 - Either: verify channel sidebar uses `IRCChannelModel` as its data source.
 - Or: verify `m_channelModel` declaration and construction are absent.
 
-- [ ] Either wire `m_channelModel` to `m_channelList` (replace `QListWidget` with `QListView`), **or** delete `m_channelModel` entirely and keep imperative `QListWidget` management.
+- [x] Deleted `m_channelModel` entirely and kept imperative `QListWidget` management.
 
 ---
 
