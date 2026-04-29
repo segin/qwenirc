@@ -49,10 +49,17 @@ MainWindow::MainWindow(QWidget* parent)
     , m_channelMenu(nullptr)
     , m_userMenu(nullptr)
     , m_toolBar(nullptr)
-   , m_statusBar(nullptr)
+    , m_statusBar(nullptr)
     , m_mainSplitter(nullptr)
     , m_currentChannel("")
     , m_serverInfo("")
+    , m_cliHost("")
+    , m_cliPort(6667)
+    , m_cliNick("")
+    , m_cliPass("")
+    , m_cliChannel("")
+    , m_cliTls(false)
+    , m_hasCliArgs(false)
     , m_disconnectAction(nullptr)
     , m_serverTab(nullptr)
 {
@@ -279,8 +286,29 @@ void MainWindow::createToolBars() {
     m_toolBar->addActions(m_viewMenu->actions());
 }
 
+void MainWindow::setConnectionArgs(const QString& host, quint16 port,
+                                   const QString& nick, const QString& pass,
+                                   const QString& channel, bool useTLS) {
+    m_cliHost = host;
+    m_cliPort = port;
+    m_cliNick = nick;
+    m_cliPass = pass;
+    m_cliChannel = channel;
+    m_cliTls = useTLS;
+    m_hasCliArgs = true;
+}
+
 void MainWindow::showConnectionDialog() {
     ServerDialog dialog(this);
+
+    if (m_hasCliArgs) {
+        dialog.setHost(m_cliHost);
+        dialog.setPort(m_cliPort);
+        dialog.setNick(m_cliNick);
+        dialog.setPass(m_cliPass);
+        dialog.setChannel(m_cliChannel);
+        dialog.setUseTLS(m_cliTls);
+    }
 
     connect(&dialog, &ServerDialog::connectRequested, this, &MainWindow::onConnect);
 

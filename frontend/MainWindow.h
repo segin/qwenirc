@@ -26,6 +26,9 @@ class MainWindow : public QMainWindow {
 public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
+    void setConnectionArgs(const QString& host, quint16 port,
+                           const QString& nick, const QString& pass,
+                           const QString& channel, bool useTLS);
 
 private slots:
     void onConnect(const QString& host, quint16 port,
@@ -74,6 +77,14 @@ private:
     QMap<QString, IRCMessageModel*> m_queryModels;
     QString m_currentChannel;
     QString m_serverInfo;
+    QString m_cliHost;
+    quint16 m_cliPort;
+    QString m_cliNick;
+    QString m_cliPass;
+    QString m_cliChannel;
+    bool m_cliTls;
+    bool m_hasCliArgs;
+
     QAction* m_disconnectAction;
     ChannelTab* m_serverTab;
 };

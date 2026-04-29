@@ -454,7 +454,7 @@ Status: `[ ]` open · `[x]` done
 **Test requirements:**
 - Running `qwenirc --host irc.example.com --port 6667 --nick testuser` shall pre-fill those fields in the dialog.
 
-- [ ] After `parser.process(app)`, read values and pass them to `MainWindow` constructor (or a separate factory method).
+- [x] After `parser.process(app)`, read values and pass them to `MainWindow` (via `setConnectionArgs`).
 
 ---
 

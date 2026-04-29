@@ -32,6 +32,14 @@ int main(int argc, char* argv[]) {
     QApplication::setStyle(QStyleFactory::create("Fusion"));
     
     MainWindow window;
+    window.setConnectionArgs(
+        parser.value(hostOption),
+        static_cast<quint16>(parser.value(portOption).toUInt()),
+        parser.value("nick"),
+        parser.value("pass"),
+        "",
+        parser.isSet(tlsOption)
+    );
     window.show();
 
     return app.exec();

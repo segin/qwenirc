@@ -24,6 +24,13 @@ public:
     QString password() const { return m_passEdit->text(); }
     QString channel() const { return m_channelEdit->text(); }
 
+    void setHost(const QString& host) { m_hostEdit->setText(host); }
+    void setPort(int port) { m_portEdit->setText(QString::number(port)); }
+    void setNick(const QString& nick) { m_nickEdit->setText(nick); }
+    void setPass(const QString& pass) { m_passEdit->setText(pass); }
+    void setChannel(const QString& channel) { m_channelEdit->setText(channel); }
+    void setUseTLS(bool enabled) { m_tlsCheckBox->setChecked(enabled); }
+
 signals:
     void connectRequested(const QString& host, quint16 port,
                           const QString& nick, const QString& pass,
