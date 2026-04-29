@@ -44,8 +44,6 @@ public:
     QString formattedText() const;
     QString coloredText() const;
 
-    static QString escapeHTML(const QString& input);
-
 private:
     MessageType m_type = MessageType::Message;
     QString m_text;

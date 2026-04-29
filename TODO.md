@@ -470,8 +470,8 @@ Already covered under REQ-MODE-02.
 
 **EARS:** The system shall not maintain a static wrapper method that merely delegates to `QString::toHtmlEscaped()`.
 
-- [ ] Delete `IRCMessage::escapeHTML` declaration from `IRCMessage.h` and implementation from `IRCMessage.cpp`.
-- [ ] Replace all `escapeHTML(x)` calls with `x.toHtmlEscaped()`.
+- [x] Delete `IRCMessage::escapeHTML` declaration from `IRCMessage.h` and implementation from `IRCMessage.cpp`.
+- [x] Replace all `escapeHTML(x)` calls with `x.toHtmlEscaped()`.
 
 ---
 

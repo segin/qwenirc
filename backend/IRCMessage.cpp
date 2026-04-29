@@ -59,47 +59,43 @@ QString IRCMessage::coloredText() const {
     case MessageType::Message:
         formatted += timestampStr + QString("<span style=\"color: %1;\"><b>%2</b></span>: %3")
             .arg("#888888")
-            .arg(escapeHTML(m_sender))
-            .arg(escapeHTML(m_text));
+            .arg(m_sender.toHtmlEscaped())
+            .arg(m_text.toHtmlEscaped());
         break;
     case MessageType::NickChange:
-        formatted += timestampStr + QString("<span style=\"color: #FF8888;\">%1</span>").arg(escapeHTML(formattedText()));
+        formatted += timestampStr + QString("<span style=\"color: #FF8888;\">%1</span>").arg(formattedText().toHtmlEscaped());
         break;
     case MessageType::Join:
-        formatted += timestampStr + QString("<span style=\"color: #88FF88;\">%1</span>").arg(escapeHTML(formattedText()));
+        formatted += timestampStr + QString("<span style=\"color: #88FF88;\">%1</span>").arg(formattedText().toHtmlEscaped());
         break;
     case MessageType::Part:
-        formatted += timestampStr + QString("<span style=\"color: #FF8888;\">%1</span>").arg(escapeHTML(formattedText()));
+        formatted += timestampStr + QString("<span style=\"color: #FF8888;\">%1</span>").arg(formattedText().toHtmlEscaped());
         break;
     case MessageType::Quit:
-        formatted += timestampStr + QString("<span style=\"color: #FF8888;\">%1</span>").arg(escapeHTML(formattedText()));
+        formatted += timestampStr + QString("<span style=\"color: #FF8888;\">%1</span>").arg(formattedText().toHtmlEscaped());
         break;
     case MessageType::Kick:
-        formatted += timestampStr + QString("<span style=\"color: #FF8888;\">%1</span>").arg(escapeHTML(formattedText()));
+        formatted += timestampStr + QString("<span style=\"color: #FF8888;\">%1</span>").arg(formattedText().toHtmlEscaped());
         break;
     case MessageType::Mode:
-        formatted += timestampStr + QString("<span style=\"color: #8888FF;\">%1</span>").arg(escapeHTML(formattedText()));
+        formatted += timestampStr + QString("<span style=\"color: #8888FF;\">%1</span>").arg(formattedText().toHtmlEscaped());
         break;
     case MessageType::Topic:
-        formatted += timestampStr + QString("<span style=\"color: #8888FF;\">%1</span>").arg(escapeHTML(formattedText()));
+        formatted += timestampStr + QString("<span style=\"color: #8888FF;\">%1</span>").arg(formattedText().toHtmlEscaped());
         break;
     case MessageType::TopicSet:
-        formatted += timestampStr + QString("<span style=\"color: #8888FF;\">%1</span>").arg(escapeHTML(formattedText()));
+        formatted += timestampStr + QString("<span style=\"color: #8888FF;\">%1</span>").arg(formattedText().toHtmlEscaped());
         break;
     case MessageType::Error:
-        formatted += timestampStr + QString("<span style=\"color: #FF0000;\">%1</span>").arg(escapeHTML(formattedText()));
+        formatted += timestampStr + QString("<span style=\"color: #FF0000;\">%1</span>").arg(formattedText().toHtmlEscaped());
         break;
 case MessageType::Notice:
-         formatted += timestampStr + QString("<span style=\"color: #AAAAAA;\">%1</span>").arg(escapeHTML(formattedText()));
+         formatted += timestampStr + QString("<span style=\"color: #AAAAAA;\">%1</span>").arg(formattedText().toHtmlEscaped());
          break;
-    case MessageType::System:
-         formatted += timestampStr + QString("<span style=\"color: #888888;\">%1</span>").arg(escapeHTML(formattedText()));
-         break;
+     case MessageType::System:
+          formatted += timestampStr + QString("<span style=\"color: #888888;\">%1</span>").arg(formattedText().toHtmlEscaped());
+          break;
     }
 
     return formatted;
-}
-
-QString IRCMessage::escapeHTML(const QString& input) {
-    return input.toHtmlEscaped();
 }
