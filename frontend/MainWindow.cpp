@@ -343,7 +343,7 @@ void MainWindow::onChannelTopic(const QString& channel, const QString& topic) {
 void MainWindow::onChannelMode(const QString& channel, const QString& mode) {
     auto* tab = findChannelTab(channel);
     if (tab) {
-        Q_UNUSED(mode);
+        tab->setMode(mode);
     }
 }
 

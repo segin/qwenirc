@@ -1,6 +1,7 @@
 #include "ChannelTab.h"
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QTabWidget>
 
  ChannelTab::ChannelTab(const QString& name, NetworkManager* nm, QWidget* parent)
     : QWidget(parent)
@@ -58,4 +59,11 @@ void ChannelTab::clearMessages() {
 
 void ChannelTab::setChatModel(QAbstractItemModel* model) {
     m_chatWidget->setChatModel(model);
+}
+
+void ChannelTab::setMode(const QString& mode) {
+    QTabWidget* tw = qobject_cast<QTabWidget*>(parentWidget());
+    if (tw && !mode.isEmpty()) {
+        tw->setTabText(tw->indexOf(this), channelName() + " [" + mode + "]");
+    }
 }

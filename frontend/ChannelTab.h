@@ -18,6 +18,7 @@ public:
 
      void setTopic(const QString& topic);
     void setTopicVisible(bool visible);
+    void setMode(const QString& mode);
     void addMessage(const IRCMessage& msg);
     void clearMessages();
 

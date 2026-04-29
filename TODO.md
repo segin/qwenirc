@@ -329,8 +329,9 @@ Status: `[ ]` open · `[x]` done
 **Test requirements:**
 - Verify that after setting a topic then receiving a MODE, the topic bar still shows the original topic.
 
-- [ ] Remove `setTopic("Channel mode: " + mode)` from `ChannelTab::setMode`.
-- [ ] Display mode in the parent `QTabWidget` tab title or a separate label, or discard it if no UI location exists yet.
+- [x] Add `void setMode(const QString& mode)` to `ChannelTab`.
+- [x] Display mode in the parent `QTabWidget` tab title as `channelName() + " [" + mode + "]"`.
+- [x] Update `MainWindow::onChannelMode` to call `tab->setMode(mode)` instead of ignoring mode.
 
 ---
 
