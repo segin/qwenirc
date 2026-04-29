@@ -78,12 +78,21 @@ void ServerDialog::applyConnection() {
     settings.setValue("channel", m_channelEdit->text());
     settings.setValue("tls", m_tlsCheckBox->isChecked());
 
+    QStringList channels;
+    for (const auto& c : m_channelEdit->text().split(',', Qt::SkipEmptyParts)) {
+        QString trimmed = c.trimmed();
+        if (!trimmed.isEmpty()) {
+            channels << trimmed;
+        }
+    }
+    QString channelStr = channels.join(",");
+
     emit connectRequested(
         m_hostEdit->text(),
         static_cast<quint16>(m_portEdit->text().toUInt()),
         m_nickEdit->text(),
         m_passEdit->text(),
-        m_channelEdit->text(),
+        channelStr,
         m_tlsCheckBox->isChecked()
     );
 

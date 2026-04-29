@@ -411,7 +411,7 @@ Status: `[ ]` open · `[x]` done
 **Test requirements:**
 - Verify `" #b".trimmed()` → `"#b"` is used in the JOIN command.
 
-- [ ] Change `m_channelEdit->text().split(',', Qt::SkipEmptyParts)` to `.split(',').filter/map` with `.trimmed()` applied to each element, discarding empties after trim.
+- [x] In `applyConnection`, split on `,`, trim each element, discard empties after trim, re-join with `,`.
 
 ---
 
