@@ -195,8 +195,8 @@ Status: `[ ]` open · `[x]` done
 - Verify `onSslErrors({})` does not crash.
 - Verify `onSslErrors({QSslError(QSslError::CertificateExpired)})` emits the error string.
 
-- [ ] Guard: `if (errors.isEmpty()) { emit serverError("SSL error"); return; }`
-- [ ] Change to `for (const auto& e : errors) { emit serverError("SSL: " + e.errorString()); }` then disconnect.
+- [x] Guard: `if (errors.isEmpty()) { emit serverError("SSL error"); return; }`
+- [x] Change to `for (const auto& e : errors) { emit serverError("SSL: " + e.errorString()); }` then disconnect.
 
 ---
 

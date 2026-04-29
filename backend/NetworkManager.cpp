@@ -261,7 +261,13 @@ void NetworkManager::onError(QAbstractSocket::SocketError error) {
 }
 
 void NetworkManager::onSslErrors(const QList<QSslError>& errors) {
-    emit serverError("SSL error: " + errors.first().errorString());
+    if (errors.isEmpty()) {
+        emit serverError("SSL error");
+        return;
+    }
+    for (const auto& e : errors) {
+        emit serverError("SSL: " + e.errorString());
+    }
     m_socket->disconnectFromHost();
 }
 
