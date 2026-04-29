@@ -6,7 +6,6 @@ NetworkManager::NetworkManager(QObject* parent)
     , m_socket(new QTcpSocket(this))
     , m_state(Disconnected)
     , m_pingTimer(new QTimer(this))
-    , m_waitingCaps(false)
     , m_prefixSymbols({'@', '%', '+'})
 {
     connect(m_socket, &QAbstractSocket::connected, this, &NetworkManager::onConnected);
@@ -199,7 +198,6 @@ void NetworkManager::onConnected() {
 
     // Request capabilities by sending CAP LS 302
     sendRaw("CAP LS 302\r\n");
-    m_waitingCaps = true;
 
     // Don't send NICK/USER yet - wait for CAP END
     // Registration will happen in handleCapCommand when we receive CAP END
@@ -713,8 +711,6 @@ void NetworkManager::handleCapCommand(const QStringList& params) {
                 acceptedCaps.append(cap);
             }
         }
-        
-        m_waitingCaps = false;
         
         if (!acceptedCaps.isEmpty()) {
             sendCommand("CAP", QStringList() << "REQ" << acceptedCaps.join(' '));

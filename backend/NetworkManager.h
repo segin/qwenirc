@@ -127,7 +127,6 @@ private:
     QSet<QString> m_serverCaps;
     QByteArray m_lineBuffer;
     int m_nickRetries = 0;
-    bool m_waitingCaps = false;
     QMap<QString, QString> m_isupport;
 
     QChar extractModePrefix(const QString& nick);

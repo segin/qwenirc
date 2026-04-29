@@ -549,7 +549,7 @@ Already covered under REQ-MODE-02.
 
 **EARS:** The system shall not retain member variables that are set but never read.
 
-- [ ] Delete `m_waitingCaps` from header and all assignment sites.
+- [x] Delete `m_waitingCaps` from header and all assignment sites.
 
 ---
 
