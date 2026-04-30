@@ -512,9 +512,14 @@ void NetworkManager::handleNotice(const QString& prefix, const QStringList& para
         msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate));
     }
 
-    if (target.startsWith((m_isupport["CHANTYPES"].isEmpty() ? '#' : m_isupport["CHANTYPES"].front().toLatin1())) &&
-        channel(target)) {
+    QChar chantype = m_isupport["CHANTYPES"].isEmpty() ? QChar('#') : m_isupport["CHANTYPES"].front();
+    bool isServerSender = !prefix.contains('!') && !prefix.contains('@');
+    bool isPreRegTarget = (target == "*" || target == "AUTH");
+
+    if (target.startsWith(chantype) && channel(target)) {
         emit channelMessage(target, msg);
+    } else if (isServerSender || isPreRegTarget) {
+        emit serverChannelMessage(QString("[%1] %2").arg(sender).arg(text));
     } else {
         emit channelMessage(sender, msg);
         emit queryTabNeeded(sender);
