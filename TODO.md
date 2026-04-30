@@ -1,808 +1,402 @@
-# QwenIRC — Audit Fix Tasklist
+# QwenIRC — Audit Fix Tasklist (round 2)
 
-Each task below is one of the issues identified in the audit. Tasks are ordered by severity. For every task: read the file, find the location, understand what's wrong, then apply the fix exactly as described. When done, mark the checkbox `[x]`.
+Each task carries:
+
+- **User story** — who needs the behaviour and why.
+- **Requirements** in EARS form (`The system shall…`, `When X, the system shall…`, `If Y, then the system shall…`).
+- **Location** — file, function, line range.
+- **The bug** — current behaviour, with the offending code quoted.
+- **Fix** — drop-in replacement code.
+- **Acceptance** — observable evidence the requirement is met.
+
+When a task is done and acceptance has been verified, mark its checkbox `[x]`.
 
 ---
 
 ## CRITICAL
 
-### [ ] C-1. Split CAP ACK capabilities by space
+### [ ] B-1. Channel-mode display must not mutate the tab title
 
-**File:** `backend/NetworkManager.cpp`, function `handleCapCommand`, lines ~740–760.
+**User story.**
+As an IRC user, I want my channel tabs to keep showing the channel name regardless of what mode information the server reports, so that I can identify and click into the right tab without the label shifting under me.
 
-**The bug.** The IRC server sends `CAP ACK` like this:
+**Requirements (EARS).**
+- **REQ-B1-1 (ubiquitous).** The system shall keep each channel tab's display text equal to the channel's IRC name for the entire lifetime of the tab.
+- **REQ-B1-2 (event-driven).** When the system receives a channel-mode update, the system shall make the mode string available through the tab's tooltip.
+- **REQ-B1-3 (unwanted behaviour).** If the channel-mode string is empty, then the system shall fall back to displaying just the channel name in the tooltip.
 
-```
-:server CAP nick ACK :sasl server-time echo-message
-```
+**Location.** `frontend/ChannelTab.cpp`, function `setMode`, lines ~60–66.
 
-After `parseMessage` runs, `params` contains `["nick", "ACK", "sasl server-time echo-message"]` — three elements, the third being a *single space-delimited string*. The current code does:
+**The bug.**
 
 ```cpp
-QStringList caps = params.mid(2);   // ["sasl server-time echo-message"] — ONE element
-for (const auto& cap : caps) {
-    QString capName = cap;          // "sasl server-time echo-message"
-    ...
-    m_activeCaps.insert(capName);   // inserts the whole string as one cap
+void ChannelTab::setMode(const QString& mode) {
+    QTabWidget* tw = parentWidget() ? qobject_cast<QTabWidget*>(parentWidget()->parentWidget()) : nullptr;
+    if (tw && !mode.isEmpty()) {
+        tw->setTabText(tw->indexOf(this), channelName() + " [" + mode + "]");
+    }
 }
 ```
 
-So `m_activeCaps` ends up containing the literal key `"sasl server-time echo-message"` instead of three separate keys `"sasl"`, `"server-time"`, `"echo-message"`.
+After the first `RPL 324` arrives, the tab's display text becomes `#chan [+nt]`. Every other site in `MainWindow` looks tabs up by `tabText`, so the mutated text breaks message routing (see B-2). Symptom reported by the user: PRIVMSGs from other people stop appearing in the channel tab.
 
-**Why it matters.** Later in `sendUserInput`:
+**Fix.**
 
 ```cpp
-if (!m_activeCaps.contains("echo-message")) {
-    // emit local echo
+void ChannelTab::setMode(const QString& mode) {
+    QTabWidget* tw = parentWidget() ? qobject_cast<QTabWidget*>(parentWidget()->parentWidget()) : nullptr;
+    if (!tw) return;
+    int idx = tw->indexOf(this);
+    if (idx < 0) return;
+    tw->setTabToolTip(idx, mode.isEmpty() ? channelName() : channelName() + "  [" + mode + "]");
+    // tab text stays as channelName() — do not rewrite it
 }
 ```
 
-This always returns `false` because the set contains the joined string, not `"echo-message"`. Result: every outgoing message is locally echoed even when the server is already echoing it back via `echo-message`, producing duplicate messages on screen.
-
-**Fix.** Replace the `params.mid(2)` line so the trailing param is split into individual cap tokens:
-
-```cpp
-QStringList caps;
-if (params.size() > 2) {
-    caps = params[2].split(' ', Qt::SkipEmptyParts);
-}
-```
-
-The rest of the loop body stays the same. Do the same fix for the `LS` and `NAK` branches if they have the same pattern.
+**Acceptance.** `cmake --build build` clean; after joining a channel and receiving RPL 324, the tab text reads exactly `#qwenirc` (or whatever was joined), and hovering the tab shows the mode in a tooltip.
 
 ---
 
-### [ ] C-2. Initialise traffic-log pointers to nullptr
+### [ ] B-2. Tab routing must use the channel-name property, not the display text
 
-**File:** `backend/NetworkManager.h`, lines ~143–146.
+**User story.**
+As an IRC user, I want messages from other people in a channel to appear in that channel's tab, so that I can read and reply to the conversation.
 
-**The bug.** The header declares:
+**Requirements (EARS).**
+- **REQ-B2-1 (ubiquitous).** The system shall identify a channel tab by the `ChannelTab::channelName()` property, never by the tab's user-visible display text.
+- **REQ-B2-2 (event-driven).** When the system receives a `channelMessage` for an existing channel tab, the system shall append the message to that tab's chat view.
+- **REQ-B2-3 (unwanted behaviour).** If no tab exists for the message's channel, then the system shall not crash, silently discard the message without logging, or post it to an unrelated tab.
+
+**Location.** `frontend/MainWindow.cpp`. Five sites:
+
+- `findChannelTab` — lines ~461–467
+- `findQueryTab` — lines ~511–517
+- `tabCloseRequested` lambda inside `initializeUI` — line ~82
+- `currentChanged` lambda — lines ~187–196 (also covered by B-4)
+- `removeChannelTab` loop — line ~447
+
+**The bug.** Each site compares against `m_channelTabs->tabText(i)`. After B-1 mutates a tab's text, the comparison fails and `findChannelTab` returns `nullptr`. The PRIVMSG handler then has no tab to deliver the message into and the message is dropped.
+
+**Fix.** Replace every `tabText`-based comparison with a `qobject_cast<ChannelTab*>(...)->channelName()` comparison.
+
+`findChannelTab`:
 
 ```cpp
-QFile* m_trafficLog;
-QTextStream* m_trafficLogStream;
+ChannelTab* MainWindow::findChannelTab(const QString& name) {
+    for (int i = 0; i < m_channelTabs->count(); ++i) {
+        auto* tab = qobject_cast<ChannelTab*>(m_channelTabs->widget(i));
+        if (tab && tab->channelName() == name) return tab;
+    }
+    return nullptr;
+}
 ```
 
-Neither has an in-class default initialiser, and neither is set in the `NetworkManager` constructor's initialiser list. In C++, raw pointer members without an initialiser hold *indeterminate values* — reading them is undefined behaviour.
+`findQueryTab` — same body, or have it call `findChannelTab` and return the result.
 
-**Why it matters.** `logTraffic()` does:
+`tabCloseRequested` lambda:
 
 ```cpp
-if (!m_trafficLogStream) return;
+connect(m_channelTabs, &QTabWidget::tabCloseRequested, this, [this](int index) {
+    auto* tab = qobject_cast<ChannelTab*>(m_channelTabs->widget(index));
+    if (!tab || tab->channelName() == "Server") return;
+    tab->close();
+});
 ```
 
-This test reads an indeterminate pointer. On most platforms it happens to be non-null garbage, so the `return` doesn't fire and the next line dereferences the garbage pointer, crashing. `sendRaw()` calls `logTraffic` on every outgoing line, so the program would crash on the very first sent command.
-
-**Fix.** Add `= nullptr` to both declarations in the header:
+`removeChannelTab`:
 
 ```cpp
-QFile* m_trafficLog = nullptr;
-QTextStream* m_trafficLogStream = nullptr;
+void MainWindow::removeChannelTab(const QString& name) {
+    for (int i = 0; i < m_channelTabs->count(); ++i) {
+        auto* tab = qobject_cast<ChannelTab*>(m_channelTabs->widget(i));
+        if (tab && tab->channelName() == name) {
+            m_channelTabs->removeTab(i);
+            break;
+        }
+    }
+    if (m_channelModels.contains(name)) {
+        delete m_channelModels.take(name);
+    }
+}
 ```
+
+`currentChanged` is rewritten in B-4.
+
+**Acceptance.** After joining `#qwenirc` and waiting for RPL 324, an external user's PRIVMSG to that channel appears in the channel tab in real time.
 
 ---
 
 ## HIGH
 
-### [ ] H-1. Fix the CTCP VERSION reply format
+### [ ] B-3. Server-originated NOTICEs must land in the Server tab, not spawn a query tab
 
-**File:** `backend/NetworkManager.cpp`, function `sendCtcpVersionReply`, line ~982.
+**User story.**
+As an IRC user, I want pre-registration server messages (hostname lookup, ident lookup, services notices, network broadcasts) to appear in the Server tab, so that my tab bar isn't polluted with a tab named after the server hostname.
 
-**The bug.** Current code:
+**Requirements (EARS).**
+- **REQ-B3-1 (event-driven).** When the system receives a NOTICE whose source prefix contains neither `!` nor `@`, the system shall route the message to the Server tab.
+- **REQ-B3-2 (event-driven).** When the system receives a NOTICE addressed to `*` or to `AUTH`, the system shall route the message to the Server tab regardless of source.
+- **REQ-B3-3 (event-driven).** When the system receives a NOTICE from a user (prefix `nick!ident@host`) addressed to the local nick, the system shall route the message to a query tab for that user, creating the tab if absent.
+- **REQ-B3-4 (unwanted behaviour).** If the source prefix is a server hostname, then the system shall not call `queryTabNeeded` for it.
 
-```cpp
-QString reply = "\001VERSION\001 QwenIRC 0.1.0 \001";
-```
+**Location.** `backend/NetworkManager.cpp`, function `handleNotice`, lines ~486–522.
 
-A CTCP message is delimited by a single pair of `\001` bytes, with the command and arguments inside. The current string contains *three* `\001` bytes. Other clients parse the first `\001VERSION\001` as a complete (empty) CTCP VERSION reply and ignore everything after.
-
-**Fix.** One pair of delimiters, command and version inside:
-
-```cpp
-QString reply = "\001VERSION QwenIRC 0.1.0\001";
-```
-
----
-
-### [ ] H-2. Don't reply to CTCP VERSION received in a NOTICE
-
-**File:** `backend/NetworkManager.cpp`, function `handleNotice`, lines ~501–503.
-
-**The bug.** Current code:
+**The bug.**
 
 ```cpp
-if (ctcpCommand.toUpper() == "VERSION") {
-    sendCtcpVersionReply(sender);  // WRONG
-    emit ctcpReply(sender, "VERSION", ctcpText);
-}
-```
-
-IRC convention: **CTCP requests are sent in `PRIVMSG`; CTCP replies are sent in `NOTICE`.** A CTCP VERSION inside a NOTICE is the *response* to our own earlier VERSION query. Replying to it sends another VERSION reply, which the peer's client (if it has the same bug) will reply to, and so on — a tight reply loop.
-
-**Fix.** Remove the `sendCtcpVersionReply` call. Only emit the `ctcpReply` signal so UI can display the version string we received:
-
-```cpp
-if (ctcpCommand.toUpper() == "VERSION") {
-    emit ctcpReply(sender, "VERSION", ctcpText);
-}
-```
-
-The CTCP VERSION reply is correctly sent in `handlePrivMsg`, where it belongs.
-
----
-
-### [ ] H-3. Handle `@` and `*` channel-visibility prefixes in RPL 353
-
-**File:** `backend/NetworkManager.cpp`, in `handleNumericReply` for numeric 353, lines ~853–870.
-
-**The bug.** RPL_NAMREPLY has the form `353 <client> <symbol> <channel> :<users>` where `<symbol>` is one of `=` (public channel), `@` (secret channel), or `*` (private channel). The current code only recognises `=`:
-
-```cpp
-QString channel = params.value(1, "");
-int paramIdx = 2;
-if (channel == "=") {
-    channel = params.value(2, "");
-    paramIdx = 3;
-} else if (channel.startsWith('=')) {
-    channel = channel.mid(1);
-}
-```
-
-For a secret channel, `params[1]` is `"@"`, so `channel` ends up being `"@"`, `paramIdx` stays `2`, and we read the channel name `"#secret"` as the *user list*. NAMES gets routed to a phantom channel called `"@"` and the actual NAMES are silently dropped.
-
-**Fix.** Extend the condition to all three symbols:
-
-```cpp
-QString channel = params.value(1, "");
-int paramIdx = 2;
-if (channel == "=" || channel == "@" || channel == "*") {
-    channel = params.value(2, "");
-    paramIdx = 3;
-}
-```
-
-The `else if (channel.startsWith('='))` branch can be deleted — it's dead code with the corrected condition above (and it was wrong anyway, the `=` is always a separate token, not a prefix on the channel name).
-
----
-
-### [ ] H-4. Preserve user mode prefix on nick change
-
-**File:** `frontend/MainWindow.cpp`, function `onUserChangedNick`, lines ~423–458.
-
-**The bug.** In `NetworkManager::handleNick` (NM.cpp ~525–556), the user is renamed in the channel's user list *before* the `userChangedNick` signal is emitted:
-
-```cpp
-ch->removeUser(oldNick);
-ch->addUser(IRCUser(newNick, ident, host));
-emit channelMessage(it.key(), msg);
-// ... (loop continues for other channels)
-```
-
-`emit userChangedNick(oldNick, newNick)` then runs (after the loop, in the same function), and `MainWindow::onUserChangedNick` does:
-
-```cpp
-IRCUser* user = ch ? ch->findUser(oldNick) : nullptr;   // returns nullptr — already renamed!
+QString sender = prefix.section('!', 0, 0);
 ...
-if (user) {
-    m_userList->item(i)->setText(user->userPrefix() + newNick);
+if (target.startsWith(chantype) && channel(target)) {
+    emit channelMessage(target, msg);
 } else {
-    m_userList->item(i)->setText(newNick);              // prefix lost
+    emit channelMessage(sender, msg);
+    emit queryTabNeeded(sender);
 }
 ```
 
-`findUser(oldNick)` returns `nullptr` because the user is now stored as `newNick`. The sidebar entry is then updated to bare `newNick` — the `@`/`+`/etc. prefix is gone.
+A server prefix has no `!`, so `prefix.section('!', 0, 0)` returns the whole hostname. The else-branch fires `queryTabNeeded("weber.oftc.net")` and `MainWindow::addQueryTab` creates a tab labelled with the server hostname.
 
-**Fix.** Look up the renamed user by `newNick` instead of `oldNick`:
+**Fix.** Replace the else-branch (keep the existing CTCP block above it unchanged):
 
 ```cpp
-IRCUser* user = ch ? ch->findUser(newNick) : nullptr;
+bool isServerSender = !prefix.contains('!') && !prefix.contains('@');
+bool isPreRegTarget = (target == "*" || target == "AUTH");
+
+QChar chantype = m_isupport["CHANTYPES"].isEmpty() ? QChar('#') : m_isupport["CHANTYPES"].front();
+if (target.startsWith(chantype) && channel(target)) {
+    emit channelMessage(target, msg);
+} else if (isServerSender || isPreRegTarget) {
+    emit serverChannelMessage(QString("[%1] %2").arg(sender).arg(text));
+} else {
+    emit channelMessage(sender, msg);
+    emit queryTabNeeded(sender);
+}
 ```
 
-That's the only change needed. The `if (user)` branch already uses `user->userPrefix()` which is correct.
+**Acceptance.** Connecting to `irc.oftc.net` produces no tab named after the server hostname; the "*** Looking up your hostname…" / "*** Found your hostname" / similar pre-registration notices appear in the Server tab.
 
 ---
 
-### [ ] H-5. Guard against empty `context` before indexing
+### [ ] B-4. Active-tab change must repopulate the user list from the new channel
 
-**File:** `backend/NetworkManager.cpp`, function `sendUserInput`, line ~109.
+**User story.**
+As an IRC user, when I switch back to a channel tab I want the user-list sidebar to show that channel's users, so that I always see who is in the channel I'm reading.
 
-**The bug.** Current code:
+**Requirements (EARS).**
+- **REQ-B4-1 (event-driven).** When the system makes a channel tab active, the system shall populate the user-list sidebar with the users currently known for that channel.
+- **REQ-B4-2 (event-driven).** When the system makes the Server tab active, the system shall hide the user-list sidebar and clear its contents.
+- **REQ-B4-3 (event-driven).** When the system makes a query (private message) tab active, the system shall hide the user-list sidebar.
+- **REQ-B4-4 (state-driven).** While a channel tab is active, the system shall display each user's mode prefix (`@`, `+`, etc.) prepended to the user's nick in the sidebar.
 
-```cpp
-} else if (cmd == "TOPIC") {
-    if ((m_isupport["CHANTYPES"].isEmpty() ? '#' : m_isupport["CHANTYPES"].front().toLatin1()) == context[0]
-            && context != "Server") {
-```
+**Location.** `frontend/MainWindow.cpp`, the `currentChanged` lambda inside `initializeUI`, lines ~186–196.
 
-`context[0]` is evaluated *before* the `&& context != "Server"` short-circuit can save us. If `context` is an empty string, `context[0]` is undefined behaviour in release builds (and asserts in debug). Empty `context` shouldn't happen via the UI path, but a `/topic` issued on a tab with an empty title or a future code path could trigger it.
-
-**Fix.** Reorder so the empty check runs first:
-
-```cpp
-} else if (cmd == "TOPIC") {
-    QChar chanType = m_isupport["CHANTYPES"].isEmpty() ? QChar('#') : m_isupport["CHANTYPES"].front();
-    if (!context.isEmpty() && context != "Server" && context[0] == chanType) {
-```
-
-This also factors out the awkward double-ternary so the line is readable.
-
----
-
-## MEDIUM
-
-### [ ] M-1. Avoid iterator invalidation when iterating `m_channels`
-
-**File:** `backend/NetworkManager.cpp`, functions `handleNick` (~545) and `handleQuit` (~675).
-
-**The bug.** Both functions do:
+**The bug.**
 
 ```cpp
-for (auto it = m_channels.begin(); it != m_channels.end(); ++it) {
-    IRCChannel* ch = it.value();
-    if (ch->findUser(nick) != nullptr) {
-        ...
-        emit channelMessage(it.key(), msg);   // synchronous slot call
+connect(m_channelTabs, &QTabWidget::currentChanged, this, [this](int index) {
+    QString tabName = m_channelTabs->tabText(index);
+    if (tabName == "Server") {
+        m_currentChannel = "";
+        m_userList->clear();
+        m_userList->setVisible(false);
+    } else {
+        m_currentChannel = tabName;
+        m_userList->setVisible(true);
     }
-}
+});
 ```
 
-`emit` with a direct connection runs the connected slot synchronously *inside* `emit`. If any connected slot ever modified `m_channels` (e.g., a future `/part` triggered by a UI event during the message broadcast), the iterator would be invalidated and the next `++it` would crash. No connected slot does this today, but the pattern is fragile.
+The lambda only toggles user-list visibility. It never clears and repopulates from the channel that's now active, so switching from `#a` to `#b` shows `#a`'s users.
 
-**Fix.** Snapshot the keys first, then iterate the snapshot:
+**Fix.** Look up the active tab via `ChannelTab::channelName()` (depends on B-2), then rebuild the list from `m_network->channel(name)->users()`:
 
 ```cpp
-QList<QString> keysToNotify;
-for (auto it = m_channels.begin(); it != m_channels.end(); ++it) {
-    if (it.value()->findUser(nick) != nullptr) {
-        keysToNotify.append(it.key());
+connect(m_channelTabs, &QTabWidget::currentChanged, this, [this](int index) {
+    auto* tab = qobject_cast<ChannelTab*>(m_channelTabs->widget(index));
+    QString name = tab ? tab->channelName() : QString();
+    if (name.isEmpty() || name == "Server") {
+        m_currentChannel.clear();
+        m_userList->clear();
+        m_userList->setVisible(false);
+        return;
     }
-}
-for (const QString& key : keysToNotify) {
-    IRCChannel* ch = m_channels.value(key);
-    if (!ch) continue;
-    // ... apply rename / quit logic, emit signals ...
-}
+    m_currentChannel = name;
+    m_userList->clear();
+    if (auto* ch = m_network->channel(name)) {
+        for (const IRCUser& u : ch->users()) {
+            QString prefix = u.userPrefix();
+            m_userList->addItem(prefix.isEmpty() ? u.nick() : prefix + u.nick());
+        }
+    }
+    m_userList->setVisible(true);
+});
 ```
 
-Apply the same restructuring to `handleQuit`.
+(Query tabs have no `IRCChannel`; the loop is skipped — correct for a PM.)
+
+**Acceptance.** Join `#a` and `#b`, observe both sidebars while the tab is active. Switching tabs always shows the active channel's user list.
 
 ---
 
-### [ ] M-2. Parse IRCv3 message tags by first `=` only
+## CARRY-OVER (still open from the previous pass)
 
-**File:** `backend/NetworkManager.cpp`, function `parseLine`, lines ~316–322.
+### [ ] M-1 (finish). `handleQuit` must snapshot affected channels before iterating
 
-**The bug.** Current code:
+**User story.**
+As an IRC user, I want my client to remain stable when a user quits, so that a connected slot reacting to one of my channels can't crash the application.
 
-```cpp
-QStringList tagPairs = tags.split(';', Qt::SkipEmptyParts);
-for (const QString& tag : tagPairs) {
-    QStringList kv = tag.split('=');
-    if (kv.size() == 2 && kv[0] == "time") {
-        serverTime = kv[1];
-    }
-}
-```
+**Requirements (EARS).**
+- **REQ-M1-1 (event-driven).** When the system processes a QUIT, the system shall first compute the set of channels containing the quitting user and shall iterate that set when emitting per-channel signals.
+- **REQ-M1-2 (unwanted behaviour).** If a slot connected to `channelMessage` modifies `m_channels` during iteration, then the system shall not invalidate any iterator currently in use.
 
-`tag.split('=')` splits on *every* `=`. The current `time` tag values (ISO 8601 timestamps) don't contain `=`, but other IRCv3 tags certainly do (`msgid`, `label`, vendor-prefixed extension tags). For any such tag, `kv.size()` is `>2`, the `==2` check fails, and the tag is silently skipped. Future tag-aware code will fail mysteriously.
+**Location.** `backend/NetworkManager.cpp`, function `handleQuit`.
 
-**Fix.** Split on the first `=` only:
+**The bug.** The handler still iterates `m_channels` directly while emitting `channelMessage` and calling `removeUser`, even though `handleNick` was rewritten to snapshot keys first. Same iterator-invalidation hazard.
 
-```cpp
-QStringList tagPairs = tags.split(';', Qt::SkipEmptyParts);
-for (const QString& tag : tagPairs) {
-    int eq = tag.indexOf('=');
-    QString key = (eq < 0) ? tag : tag.left(eq);
-    QString value = (eq < 0) ? QString() : tag.mid(eq + 1);
-    if (key == "time") {
-        serverTime = value;
-    }
-}
-```
+**Fix.** Apply the same `keysToNotify` pattern used in `handleNick`: collect the keys for which `findUser(nick)` is non-null, then iterate the key list, performing emit/remove inside that second loop.
+
+**Acceptance.** Build clean; existing tests pass; a QUIT broadcast for a user present in multiple channels updates each channel exactly once with no crash.
 
 ---
 
-### [ ] M-3. Don't put the channel name inside the Part message text
+### [ ] M-4 (finish). RPL 333 message must include the topic-set timestamp
 
-**File:** `backend/NetworkManager.cpp` line ~606 (handlePart), and `backend/IRCMessage.cpp` lines ~22–24 (formattedText for Part).
+**User story.**
+As an IRC user, I want the channel-topic banner to show both who set the topic and when, so that I have full provenance for the topic I'm reading.
 
-**The bug.** Current `handlePart`:
+**Requirements (EARS).**
+- **REQ-M4-1 (event-driven).** When the system receives RPL 333, the system shall emit a channel message containing the setter's nick and a human-readable rendering of the timestamp.
 
-```cpp
-IRCMessage msg(MessageType::Part, chanName + " " + reason, nick);
-```
+**Location.** `backend/NetworkManager.cpp`, numeric 333 branch in `handleNumericReply`.
 
-And `IRCMessage::formattedText` for Part:
+**The bug.** The current branch reads `params.value(3)` into `timestamp` and then drops it. The displayed text is `"Topic set by X"`.
 
-```cpp
-case MessageType::Part:
-    result = (!m_text.isEmpty()) ? QString("%1 left %2").arg(m_sender).arg(m_text)
-                                 : QString("%1 left").arg(m_sender);
-```
-
-The combined effect is `"alice left #channel because lunch"` where `#channel because lunch` is one blob. The channel name belongs in the message's channel field, not its text; the text should be just the reason.
-
-**Fix in `NetworkManager.cpp`** — pass the reason as text, set the channel separately:
-
-```cpp
-IRCMessage msg(MessageType::Part, reason, nick);
-msg.setChannel(chanName);
-```
-
-**Fix in `IRCMessage.cpp`** — Part formatting changes to "left the channel" with the reason in parentheses (matching the Quit format):
-
-```cpp
-case MessageType::Part:
-    result = (!m_text.isEmpty()) ? QString("%1 left %2 (%3)").arg(m_sender).arg(m_channel).arg(m_text)
-                                 : QString("%1 left %2").arg(m_sender).arg(m_channel);
-    break;
-```
-
-(`m_channel` is already a member.)
-
----
-
-### [ ] M-4. Display the topic setter from RPL 333
-
-**File:** `backend/NetworkManager.cpp`, function `handleNumericReply` for numeric 333, lines ~829–832.
-
-**The bug.** Current code:
+**Fix.** Compose the message with both fields:
 
 ```cpp
 } else if (num == 333) {
     QString channel = params.value(1, "");
-    QString timestamp = params.value(2, "");
-    QString setter = params.value(3, "");
-}
-```
-
-The variables are read into locals and the function falls through to the closing brace with nothing emitted. The user never sees who set the topic.
-
-**Fix.** Emit it as a server-channel message (or a system message in the channel tab). Simplest:
-
-```cpp
-} else if (num == 333) {
-    QString channel = params.value(1, "");
-    QString setter = params.value(2, "");
-    QString timestamp = params.value(3, "");
-    QDateTime when = QDateTime::fromSecsSinceEpoch(timestamp.toLongLong());
+    QString setter  = params.value(2, "");
+    QString tsStr   = params.value(3, "");
+    QDateTime when = QDateTime::fromSecsSinceEpoch(tsStr.toLongLong());
     QString msgText = QString("Topic set by %1 on %2")
-        .arg(setter.section('!', 0, 0))
-        .arg(when.toString(Qt::ISODate));
+                          .arg(setter.section('!', 0, 0))
+                          .arg(when.toString(Qt::ISODate));
     IRCMessage msg(MessageType::Topic, msgText, "");
     msg.setChannel(channel);
     emit channelMessage(channel, msg);
 }
 ```
 
-Note the param order on most servers is `<client> <channel> <setter> <timestamp>`, so params[1]=channel, params[2]=setter, params[3]=timestamp. (The current code had params[2] and params[3] mislabelled.)
+**Acceptance.** Joining a channel with a topic shows both lines in the channel tab — the topic itself (RPL 332) and "Topic set by X on YYYY-MM-DDThh:mm:ss" (RPL 333).
 
 ---
 
-### [ ] M-5. Handle RPL 001 (RPL_WELCOME) and update `m_nick` from it
+### [ ] L-4 (still open). Mute the CAP-acknowledged / CAP-rejected announcements
 
-**File:** `backend/NetworkManager.cpp`, function `handleNumericReply`, near the top of the if-chain (currently the chain starts at `if (num == 2)`).
+**User story.**
+As an IRC user, I don't want to see implementation chatter about which IRCv3 capabilities the server acknowledged or rejected, so that the Server tab is reserved for things I actually need to read.
 
-**The bug.** Numeric 001 is the welcome line. Its first parameter is the nick the server has assigned us — possibly different from what we asked for (truncated, or the server may have appended a suffix to avoid a collision). The current code skips 001 entirely; `m_nick` continues to hold whatever we sent in the `NICK` command. Local-echo suppression, CTCP target matching and query routing all use `m_nick` and will all be wrong if the server assigned a different nick.
+**Requirements (EARS).**
+- **REQ-L4-1 (event-driven).** When the system processes a `CAP ACK` or `CAP NAK`, the system shall not emit `serverChannelMessage`.
+- **REQ-L4-2 (optional feature).** Where developer-debug logging is desired, the system shall log the acknowledged or rejected capabilities through `qDebug()`.
 
-**Fix.** Add a branch *before* the `num == 2` branch:
+**Location.** `backend/NetworkManager.cpp`, in `handleCapCommand`, ACK and NAK branches.
 
-```cpp
-if (num == 1) {
-    QString assignedNick = params.value(0, "");
-    if (!assignedNick.isEmpty() && assignedNick != m_nick) {
-        m_nick = assignedNick;
-        emit nickSet(m_nick);
-    }
-    QString welcome = params.value(1, "");
-    if (welcome.startsWith(':')) welcome = welcome.mid(1);
-    emit serverChannelMessage("RPL 001 (Welcome): " + welcome);
-} else if (num == 2) {
-```
+**The bug.** Two `emit serverChannelMessage("Capabilities acknowledged: ...")` and `"Capabilities rejected"` calls remain.
 
-(Convert the existing `if` to `else if`.)
+**Fix.** Replace both with `qDebug()` (`#include <QDebug>` if needed) or delete them.
+
+**Acceptance.** Connecting produces no "Capabilities acknowledged" / "Capabilities rejected" line in the Server tab.
 
 ---
 
-### [ ] M-6. Make `IRCChannel::findUser` safer
+### [ ] L-7 (still open). Move `sendRaw` to `protected:` and remove `friend class TestIrcParser`
 
-**File:** `backend/IRCChannel.h` and `backend/IRCChannel.cpp`, function `findUser`.
+**User story.**
+As a maintainer of `qwenirc`, I want test scaffolding to live in the test code rather than in production headers, so that production code is not coupled to test internals and the `friend` blast radius is removed.
 
-**The bug.** Current declaration:
+**Requirements (EARS).**
+- **REQ-L7-1 (ubiquitous).** The system shall expose `sendRaw` as a `protected` virtual method, accessible to subclasses but not to arbitrary callers.
+- **REQ-L7-2 (ubiquitous).** The system header shall declare no `friend` relationships with test classes.
 
-```cpp
-IRCUser* findUser(const QString& nick);
-```
+**Location.** `backend/NetworkManager.h`.
 
-The implementation returns `&m_users[i]`. That's a pointer into a `QList`. Any subsequent `addUser`/`removeUser`/`clear` call invalidates it. Today every caller uses the pointer immediately and there's no interleaving, but the contract is unsafe and a future caller could crash.
+**The bug.** `virtual void sendRaw(const QString& data);` is in the `private:` section and `friend class TestIrcParser;` is at the bottom. Both exist purely so the test subclass in `tests/test_irc_parser.cpp` can override and capture sent commands.
 
-**Fix.** Return the index instead, and add a separate `userAt(int)` accessor:
-
-```cpp
-// IRCChannel.h
-int findUserIndex(const QString& nick) const;
-IRCUser* userAt(int index);                    // pointer valid until next mutation
-const IRCUser* userAt(int index) const;
-
-// IRCChannel.cpp
-int IRCChannel::findUserIndex(const QString& nick) const {
-    for (int i = 0; i < m_users.size(); ++i) {
-        if (m_users[i].nick() == nick) return i;
-    }
-    return -1;
-}
-
-IRCUser* IRCChannel::userAt(int index) {
-    if (index < 0 || index >= m_users.size()) return nullptr;
-    return &m_users[index];
-}
-```
-
-Then update callers (currently only `applyMode` and `MainWindow::onUserChangedNick` after H-4):
+**Fix.** Add a `protected:` section, move `sendRaw` into it, delete the friend declaration:
 
 ```cpp
-int idx = ch->findUserIndex(nick);
-if (idx >= 0) {
-    IRCUser* user = ch->userAt(idx);
-    user->setUserPrefix(...);
-}
-```
-
-If the refactor is too much, at minimum keep the existing API but document the lifetime contract in the header. (The refactor is preferred.)
-
----
-
-### [ ] M-7. Make `ColorRole` actually return a colour (or remove it)
-
-**File:** `backend/IRCMessageModel.cpp`, function `data`, around line 47.
-
-**The bug.** Current code:
-
-```cpp
-case Qt::DisplayRole:
-    return msg.coloredText();   // HTML string
-case TypeRole:
-    return static_cast<int>(msg.type());
-case ColorRole:
-    return msg.coloredText();   // same HTML string — useless
-```
-
-`ColorRole` returns the same HTML string as `DisplayRole`. Any delegate that asks for `ColorRole` expecting a `QColor` gets back a string and can't use it.
-
-**Fix.** Map `MessageType` to a `QColor` (matching the colours the HTML uses):
-
-```cpp
-case ColorRole: {
-    switch (msg.type()) {
-    case MessageType::NickChange: return QColor("#FF8888");
-    case MessageType::Join:       return QColor("#88FF88");
-    case MessageType::Part:
-    case MessageType::Quit:
-    case MessageType::Kick:       return QColor("#FF8888");
-    case MessageType::Mode:
-    case MessageType::Topic:
-    case MessageType::TopicSet:   return QColor("#8888FF");
-    case MessageType::Error:      return QColor("#FF0000");
-    case MessageType::Notice:     return QColor("#AAAAAA");
-    case MessageType::System:     return QColor("#888888");
-    default:                       return QColor();
-    }
-}
-```
-
-Add `#include <QColor>` to the .cpp if not already present. If no caller uses `ColorRole`, the alternative is to delete the role entirely from the enum and the `data()` switch. Either fix is acceptable; pick one.
-
----
-
-## LOW
-
-### [ ] L-1. Stop sending an explicit NAMES after every JOIN
-
-**File:** `backend/NetworkManager.cpp`, function `joinChannel`, lines ~83–86.
-
-**The bug.** Every RFC-compliant IRC server automatically sends `353` + `366` (RPL_NAMREPLY + RPL_ENDOFNAMES) after a successful JOIN. The explicit `NAMES` command is unnecessary and produces a duplicate name list.
-
-**Fix.** Delete the second line:
-
-```cpp
-void NetworkManager::joinChannel(const QString& channel) {
-    sendCommand("JOIN", QStringList() << channel);
-    // (no explicit NAMES — server sends 353+366 automatically)
-}
-```
-
-If a `/names` slash command is wanted from the user, that path can call `sendCommand("NAMES", ...)` separately.
-
----
-
-### [ ] L-2. Remove the redundant `m_pingTimer->start()` inside `onPingTimeout`
-
-**File:** `backend/NetworkManager.cpp`, function `onPingTimeout`, lines ~279–282.
-
-**The bug.** Current code:
-
-```cpp
-void NetworkManager::onPingTimeout() {
-    sendRaw("PING :" + m_host + "\r\n");
-    m_pingTimer->start();   // unnecessary
-}
-```
-
-`m_pingTimer` is a repeating `QTimer` (`setSingleShot(true)` is never called on it). It auto-fires at its interval. Calling `start()` again restarts the interval counter from zero, harmlessly but pointlessly.
-
-**Fix.** Remove the `m_pingTimer->start()` line:
-
-```cpp
-void NetworkManager::onPingTimeout() {
-    sendRaw("PING :" + m_host + "\r\n");
-}
-```
-
----
-
-### [ ] L-3. Don't add a trailing space when there are no MODE params
-
-**File:** `backend/NetworkManager.cpp`, function `handleMode`, line ~632.
-
-**The bug.** Current code:
-
-```cpp
-emit channelMode(target, mode + " " + modeParams.join(' '));
-```
-
-When `modeParams` is empty, `join(' ')` returns `""`, so the string ends up as `"+n "` with a trailing space. That string gets shoved into the tab title via `ChannelTab::setMode`, leaving a visible trailing space.
-
-**Fix.** Only append the space-joined params if non-empty:
-
-```cpp
-QString modeStr = modeParams.isEmpty() ? mode : (mode + " " + modeParams.join(' '));
-emit channelMode(target, modeStr);
-```
-
-Apply the same fix to the second `emit channelMessage` block in the same function (line ~640) where the same pattern is used to build the IRCMessage text.
-
----
-
-### [ ] L-4. Mute CAP-negotiation chatter in the server tab
-
-**File:** `backend/NetworkManager.cpp`, lines ~296, 763, 767, ~290 in `onCapReqTimeout`.
-
-**The bug.** Every connection logs to the server tab:
-
-```
-Capabilities requested: sasl, server-time, echo-message, ...
-Capabilities acknowledged: ...
-```
-
-This is implementation detail. End users don't need to see it.
-
-**Fix.** Replace the four `emit serverChannelMessage("Capabilities ...")` calls with `qDebug()` (or just delete them). For example:
-
-```cpp
-qDebug() << "Capabilities requested:" << acceptedCaps.join(", ");
-```
-
-`#include <QDebug>` if not already present.
-
----
-
-### [ ] L-5. Remove the unused `m_trafficLogFile` member
-
-**File:** `backend/NetworkManager.h`, line ~144.
-
-**The bug.** `QString m_trafficLogFile;` is declared, never assigned, never read. Dead code.
-
-**Fix.** Delete the line.
-
----
-
-### [ ] L-6. Remove the wrong `[[maybe_unused]]` on `prefix`
-
-**File:** `backend/NetworkManager.cpp`, function `handleNumericReply` declaration, line ~773.
-
-**The bug.** Current:
-
-```cpp
-void NetworkManager::handleNumericReply(const QString& numeric,
-        [[maybe_unused]] const QString& prefix,
-        const QStringList& params, const QString& serverTime) {
-```
-
-`prefix` *is* used (line ~822: `prefix.section('!', 0, 0)` for numeric 332). The attribute silences a warning that wouldn't fire anyway, and misleads readers into thinking it's unused.
-
-**Fix.** Drop the attribute:
-
-```cpp
-void NetworkManager::handleNumericReply(const QString& numeric,
-        const QString& prefix,
-        const QStringList& params, const QString& serverTime) {
-```
-
-Apply the same change in the header (`NetworkManager.h` ~line 111) for consistency.
-
----
-
-### [ ] L-7. Don't leak test scaffolding into the production header
-
-**File:** `backend/NetworkManager.h`, lines ~113 and ~149.
-
-**The bug.** The header has:
-
-```cpp
-virtual void sendRaw(const QString& data);
-...
-friend class TestIrcParser;
-```
-
-Both exist purely so the test subclass can override `sendRaw` and reach private state. Production code pays for a vtable slot it doesn't need, and `friend` opens the entire private interface.
-
-**Fix.** Two acceptable approaches; pick one:
-
-**Option A (preferred).** Make the test subclass live in the same translation unit as the test, and avoid `friend` by exposing a *protected* test-only seam:
-
-```cpp
-// in NetworkManager.h:
 protected:
-    virtual void sendRaw(const QString& data);   // protected, not private
+    virtual void sendRaw(const QString& data);
+
 private:
-    // remove the friend class declaration
+    // (rest of private section, with friend declaration removed)
 ```
 
-The test can then subclass `NetworkManager` and access `sendRaw` through the `protected` access. Anything else the test needs should also be moved to `protected`, or accessed via a public testing helper.
+The test subclass already inherits publicly and only needs `protected` access, so no changes are required in `tests/test_irc_parser.cpp`.
 
-**Option B.** Leave it as-is (test scaffolding *is* the only override) but add a comment above each one explaining why:
-
-```cpp
-// virtual to allow tests to capture sent commands; do not subclass elsewhere.
-virtual void sendRaw(const QString& data);
-...
-// gives test_irc_parser.cpp access to private parse helpers.
-friend class TestIrcParser;
-```
-
-Option A is the cleaner long-term answer. Implement A.
+**Acceptance.** Production header has no `friend` directive; tests still compile and pass.
 
 ---
 
-### [ ] L-8. Strip leading `:` from the trailing param in the no-prefix branch of `parseMessage`
+### [ ] R-1 (regression). Reset or remove `m_hasSentCapLs`
 
-**File:** `backend/NetworkManager.cpp`, function `parseMessage`, lines ~373–387.
+**User story.**
+As an IRC user, I want to be able to reconnect after a disconnect within the same session, so that I'm not forced to restart the application after a transient network blip.
 
-**The bug.** When a line starts with `:` (server prefix), the trailing-param handler at line ~356 strips the `:`:
+**Requirements (EARS).**
+- **REQ-R1-1 (event-driven).** When the system enters the connected state, the system shall send a `CAP LS 302` request to the server.
+- **REQ-R1-2 (event-driven).** When the system disconnects, the system shall reset any internal flag that gates CAP negotiation, so that a subsequent reconnect re-runs CAP LS.
+- **REQ-R1-3 (unwanted behaviour).** If the system reconnects after a previous successful CAP negotiation, then the system shall not skip CAP LS on the new connection.
+
+**Location.** `backend/NetworkManager.h` (member declaration) and `backend/NetworkManager.cpp` (`onConnected`).
+
+**The bug.**
 
 ```cpp
-if (rest.startsWith(':')) {
-    QString trailing = rest.mid(1);   // strip ':'
-    params.append(trailing);
-    break;
+// NetworkManager.h:
+bool m_hasSentCapLs = false;
+
+// NetworkManager.cpp, onConnected:
+if (!m_hasSentCapLs) {
+    m_hasSentCapLs = true;
+    sendRaw("CAP LS 302\r\n");
 }
 ```
 
-The else-branch (no prefix) builds the trailing param differently and *keeps* the `:`:
+The flag is set on the first connect and never reset. After a disconnect/reconnect, the second `onConnected` skips CAP LS, the server sees no CAP request, `sendRegistration()` is never called from the CAP ACK path, and the client hangs unregistered.
+
+The flag is also unnecessary: the plain-TCP `connected` signal and the SSL `encrypted` signal are wired to `onConnected` from disjoint code paths, and only one of them is wired up at a time per connection — they don't double-fire.
+
+**Fix (preferred).** Delete the flag and restore the simple body:
 
 ```cpp
-QString trailing = params.takeAt(i);   // ":sasl"
-while (i < params.size()) {
-    trailing += ' ' + params.takeAt(i);
-    ++i;
-}
-params.append(trailing);   // ":sasl server-time"
-```
-
-So `params` from a prefixless line have a leading `:` on the trailing param; from a prefixed line they don't. Every handler that processes a prefixless line must defensively strip `:`. The CAP LS handler does, but it's silent breakage waiting to happen for any new handler.
-
-**Fix.** Strip the `:` in the else-branch trailing construction:
-
-```cpp
-QString trailing = params.takeAt(i);
-if (trailing.startsWith(':')) trailing = trailing.mid(1);
-while (i < params.size()) {
-    trailing += ' ' + params.takeAt(i);
-    ++i;
-}
-params.append(trailing);
-```
-
-After this fix, the corresponding ":"-strip logic in `handleCapCommand` (lines ~729–731) becomes dead code and can be removed.
-
----
-
-### [ ] L-9. Make null-before-delete consistent in traffic-log shutdown
-
-**File:** `backend/NetworkManager.cpp`, functions `setTrafficLogDir` and `clearTrafficLog`.
-
-**The bug.** `setTrafficLogDir` and `clearTrafficLog` both do shutdown of the existing file/stream, but use slightly different sequences. The order should always be: delete the dependent first (`m_trafficLogStream` writes to `m_trafficLog`), then the file, then null both.
-
-**Fix.** Extract a helper and call it from both places:
-
-```cpp
-void NetworkManager::closeTrafficLog() {
-    if (m_trafficLogStream) {
-        m_trafficLogStream->flush();
-        delete m_trafficLogStream;
-        m_trafficLogStream = nullptr;
-    }
-    if (m_trafficLog) {
-        m_trafficLog->close();
-        delete m_trafficLog;
-        m_trafficLog = nullptr;
-    }
+void NetworkManager::onConnected() {
+    m_state = Connected;
+    emit stateChanged(m_state);
+    emit connected();
+    sendRaw("CAP LS 302\r\n");
 }
 ```
 
-Add `void closeTrafficLog();` to the private section of `NetworkManager.h`. Replace the inline cleanup in `setTrafficLogDir`, `clearTrafficLog`, and the destructor with a single call to `closeTrafficLog()`.
+Remove `bool m_hasSentCapLs = false;` from the header.
+
+**Fix (alternative).** If keeping the flag, reset it in `onDisconnected` and at the top of `connectToServer`.
+
+**Acceptance.** `/quit` from a connected session, then reconnect via the File menu. The new connection completes CAP negotiation and registers; the client lands in a usable state.
 
 ---
 
-### [ ] L-10. De-duplicate `MAX_MESSAGES`
+## Verification (run after all fixes)
 
-**File:** `backend/IRCChannel.h` line ~30, and `backend/IRCMessageModel.h` line ~34.
-
-**The bug.** Both classes define the same constant independently:
-
-```cpp
-// IRCChannel.h
-static const int MAX_MESSAGES = 10000;
-
-// IRCMessageModel.h
-static const int MAX_MESSAGES = 10000;
-```
-
-If one is changed, the other silently diverges, leading to subtly different trim points in the channel's persistent log vs. the model's display.
-
-**Fix.** Pick one home and have the other refer to it. Easiest: keep `IRCMessageModel::MAX_MESSAGES` and have `IRCChannel.cpp` reference it, or define the constant in a shared header. Simplest:
-
-```cpp
-// IRCChannel.h — delete the local MAX_MESSAGES, add:
-#include "IRCMessageModel.h"
-...
-// in IRCChannel.cpp: use IRCMessageModel::MAX_MESSAGES
-if (m_messages.size() > IRCMessageModel::MAX_MESSAGES) { ... }
-```
-
-If that creates a circular include (it shouldn't — IRCMessageModel.h already includes IRCChannel.h), put the constant in a tiny new header `backend/IRCConstants.h` and include it in both places.
-
----
-
-### [ ] L-11. Normalise indentation across the codebase
-
-**Files:** `backend/NetworkManager.cpp` (esp. ~284–304, ~468), `backend/IRCMessage.cpp` (~43–44, ~92–96), `frontend/MainWindow.cpp` (~86, 99, 103, 165, 180, 367), `frontend/ChannelTab.cpp` (~6, 27), `frontend/ChatWidget.cpp` (~56, 60, 68).
-
-**The bug.** Mixed 2-space, 4-space, and 1-space-off-by-one indentation, accumulated from edits made in multiple editors. No functional impact but makes diffs noisy and code harder to read.
-
-**Fix.** Run a code formatter over the codebase. Use clang-format with a 4-space, K&R-ish style. Add `.clang-format` to the repo root:
-
-```yaml
-BasedOnStyle: LLVM
-IndentWidth: 4
-ColumnLimit: 120
-PointerAlignment: Left
-AccessModifierOffset: -4
-NamespaceIndentation: None
-BreakBeforeBraces: Attach
-AllowShortFunctionsOnASingleLine: InlineOnly
-```
-
-Then run:
-
-```
-clang-format -i backend/*.cpp backend/*.h frontend/*.cpp frontend/*.h src/*.cpp tests/*.cpp
-```
-
-Verify the build still passes (`cmake --build build`) and the tests still pass (`ctest`). Commit the format change as a single commit, separate from any logic changes.
-
----
-
-## Verification
-
-After applying all fixes:
-
-1. `cmake --build build --parallel` must build cleanly with no warnings.
-2. `ctest --output-on-failure` must pass all three test binaries.
-3. Run the application against a real IRC server (`irc.libera.chat:6667`):
-   - `/join #test` should populate the user list (no duplicate user list from L-1).
-   - Outgoing messages should appear once when echo-message is negotiated (C-1).
-   - The server tab should be quiet — no CAP chatter (L-4).
-   - Topic and topic-setter line should both display (M-4).
-   - Tab title should not have a trailing space when modes are simple (L-3).
-   - A nick change of an op user should preserve the `@` in the sidebar (H-4).
+1. `cmake --build build --parallel` — builds clean with no warnings.
+2. `ctest --output-on-failure` — all three test binaries pass.
+3. Manual smoke against `irc.libera.chat:6667` or `irc.oftc.net:6667`:
+   - Connecting produces no tab named after the server hostname; pre-registration NOTICEs land in the Server tab. (B-3)
+   - The Server tab does not show "Capabilities acknowledged" or "Capabilities rejected". (L-4)
+   - `/join #qwenirc` — tab text remains exactly `#qwenirc`; mode appears in the tab tooltip. (B-1)
+   - Another user sends a message in the channel — the message appears in real time. (B-1, B-2)
+   - Switch tabs and switch back — user-list sidebar reflects the active channel's users. (B-4)
+   - Channel topic shows both the topic line and the "Topic set by X on …" line. (M-4)
+   - `/quit` and reconnect from the File menu — connect completes and the client is usable. (R-1)
