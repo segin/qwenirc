@@ -11,6 +11,9 @@
 #include <QMap>
 #include <QStringList>
 #include <QByteArray>
+#include <QFile>
+#include <QTextStream>
+#include <QDir>
 
 class NetworkManager : public QObject {
     Q_OBJECT
@@ -35,11 +38,14 @@ public:
     void sendUserInput(const QString& context, const QString& text);
     void sendNotice(const QString& target, const QString& text);
     void setNick(const QString& nick);
-    void changeMode(const QString& target, const QString& mode);
+   void changeMode(const QString& target, const QString& mode);
     void setTopic(const QString& channel, const QString& topic);
     void whois(const QString& nick);
 
-    State state();
+    void setTrafficLogDir(const QString& dir);
+    void clearTrafficLog();
+
+    State state() const;
     QString nick() const;
     QString serverHost() const;
 
@@ -133,6 +139,12 @@ private:
 
     QChar extractModePrefix(const QString& nick);
     QSet<QChar> m_prefixSymbols;
+
+    QString m_trafficLogDir;
+    QString m_trafficLogFile;
+    QFile* m_trafficLog;
+    QTextStream* m_trafficLogStream;
+    void logTraffic(const QString& data, bool outgoing);
 
     friend class TestIrcParser;
 };

@@ -7,6 +7,7 @@
 #include <QMessageBox>
 #include <QSettings>
 #include <QRandomGenerator>
+#include <QDir>
 #include <QLabel>
 
 class SidebarItemDelegate : public QStyledItemDelegate {
@@ -108,6 +109,7 @@ void MainWindow::initializeUI() {
             tab->close();
         }
     });
+    mainSplitter->addWidget(m_channelTabs);
 
     // User list sidebar
     m_userList = new QListWidget();
@@ -227,6 +229,23 @@ void MainWindow::createMenus() {
     connectAction->setStatusTip("Connect to an IRC server");
     m_menu->addAction(connectAction);
     connect(connectAction, &QAction::triggered, this, &MainWindow::showConnectionDialog);
+
+    QAction* trafficAction = new QAction("Log &Traffic", this);
+    trafficAction->setCheckable(true);
+    trafficAction->setChecked(false);
+    m_menu->addAction(trafficAction);
+    connect(trafficAction, &QAction::toggled, this, [this](bool checked) {
+        if (checked) {
+            QString dir = QDir::homePath() + "/qwenirc-traffic";
+            QDir dirObj(dir);
+            if (!dirObj.exists()) {
+                dirObj.mkpath(".");
+            }
+            m_network->setTrafficLogDir(dir);
+        } else {
+            m_network->clearTrafficLog();
+        }
+    });
 
     m_menu->addSeparator();
 

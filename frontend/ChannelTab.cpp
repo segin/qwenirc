@@ -61,7 +61,8 @@ void ChannelTab::setChatModel(QAbstractItemModel* model) {
 }
 
 void ChannelTab::setMode(const QString& mode) {
-    QTabWidget* tw = qobject_cast<QTabWidget*>(parentWidget());
+    // Tab pages are children of QTabWidget's internal QStackedWidget, so go up two levels.
+    QTabWidget* tw = parentWidget() ? qobject_cast<QTabWidget*>(parentWidget()->parentWidget()) : nullptr;
     if (tw && !mode.isEmpty()) {
         tw->setTabText(tw->indexOf(this), channelName() + " [" + mode + "]");
     }

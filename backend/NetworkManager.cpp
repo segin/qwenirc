@@ -28,6 +28,12 @@ NetworkManager::~NetworkManager() {
         delete channel;
     }
     m_channels.clear();
+    if (m_trafficLog) {
+        delete m_trafficLog;
+    }
+    if (m_trafficLogStream) {
+        delete m_trafficLogStream;
+    }
 }
 
 void NetworkManager::connectToServer(const QString& host, quint16 port,
@@ -216,6 +222,7 @@ void NetworkManager::onDisconnected() {
 void NetworkManager::onReadyRead() {
     QByteArray data = m_socket->readAll();
     m_lineBuffer += data;
+    logTraffic(QString::fromUtf8(data), false);
 
     const int MAX_BUFFER_SIZE = 10 * 1024 * 1024;
     if (m_lineBuffer.size() > MAX_BUFFER_SIZE) {
@@ -949,6 +956,7 @@ QChar NetworkManager::extractModePrefix(const QString& nick) {
 }
 
 void NetworkManager::sendRaw(const QString& data) {
+    logTraffic(data, true);
     m_socket->write(data.toUtf8());
     m_socket->flush();
 }
@@ -1000,4 +1008,45 @@ void NetworkManager::sendRegistration() {
     sendCommand("NICK", QStringList() << m_nick);
     sendCommand("USER", QStringList() << m_username << "8" << "*" << m_realname);
     m_pingTimer->start();
+}
+
+void NetworkManager::setTrafficLogDir(const QString& dir) {
+    m_trafficLogDir = dir;
+    QDir dirObj(dir);
+    if (!dirObj.exists()) {
+        dirObj.mkpath(".");
+    }
+    if (m_trafficLog) {
+        delete m_trafficLog;
+        delete m_trafficLogStream;
+        m_trafficLog = nullptr;
+        m_trafficLogStream = nullptr;
+    }
+    m_trafficLog = new QFile(dirObj.absoluteFilePath("traffic.log"));
+    if (m_trafficLog->open(QFile::Append | QFile::Text)) {
+        m_trafficLogStream = new QTextStream(m_trafficLog);
+        *m_trafficLogStream << QString("=== Traffic log started %1 ===\n").arg(QDateTime::currentDateTime().toString());
+    }
+}
+
+void NetworkManager::clearTrafficLog() {
+    if (m_trafficLog) {
+        m_trafficLog->close();
+        delete m_trafficLog;
+        delete m_trafficLogStream;
+        m_trafficLog = nullptr;
+        m_trafficLogStream = nullptr;
+    }
+    m_trafficLog = new QFile(m_trafficLogDir + "/traffic.log");
+    if (m_trafficLog->open(QFile::WriteOnly | QFile::Text)) {
+        m_trafficLogStream = new QTextStream(m_trafficLog);
+        *m_trafficLogStream << QString("=== Traffic log started %1 ===\n").arg(QDateTime::currentDateTime().toString());
+    }
+}
+
+void NetworkManager::logTraffic(const QString& data, bool outgoing) {
+    if (!m_trafficLogStream) return;
+    QString prefix = outgoing ? "C:" : "S:";
+    *m_trafficLogStream << prefix << " " << data;
+    m_trafficLogStream->flush();
 }
