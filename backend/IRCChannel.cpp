@@ -1,9 +1,7 @@
 #include "IRCChannel.h"
 #include <QRegularExpression>
 
-IRCChannel::IRCChannel(const QString& name)
-    : m_name(name)
-{
+IRCChannel::IRCChannel(const QString& name) : m_name(name) {
 }
 
 IRCUser* IRCChannel::findUser(const QString& nick) {
@@ -12,7 +10,27 @@ IRCUser* IRCChannel::findUser(const QString& nick) {
             return &m_users[i];
         }
     }
-   return nullptr;
+    return nullptr;
+}
+
+int IRCChannel::findUserIndex(const QString& nick) const {
+    for (int i = 0; i < m_users.size(); ++i) {
+        if (m_users[i].nick() == nick)
+            return i;
+    }
+    return -1;
+}
+
+IRCUser* IRCChannel::userAt(int index) {
+    if (index < 0 || index >= m_users.size())
+        return nullptr;
+    return &m_users[index];
+}
+
+const IRCUser* IRCChannel::userAt(int index) const {
+    if (index < 0 || index >= m_users.size())
+        return nullptr;
+    return &m_users[index];
 }
 
 void IRCChannel::setTopic(const QString& topic) {
@@ -24,7 +42,8 @@ void IRCChannel::setPrefix(const QString& prefix) {
 }
 
 void IRCChannel::addUser(const IRCUser& user) {
-    if (m_userSet.contains(user.nick())) return;
+    if (m_userSet.contains(user.nick()))
+        return;
     m_userSet.insert(user.nick());
     m_users.append(user);
 }
@@ -41,7 +60,7 @@ void IRCChannel::removeUser(const QString& nick) {
 
 void IRCChannel::addMessage(const IRCMessage& msg) {
     m_messages.append(msg);
-    if (m_messages.size() > IRCChannel::MAX_MESSAGES) {
+    if (m_messages.size() > IRCMessageModel::MAX_MESSAGES) {
         m_messages.removeFirst();
     }
 }
@@ -53,7 +72,8 @@ void IRCChannel::clear() {
     m_userSet.clear();
 }
 
-void IRCChannel::applyMode(const QString& modeStr, const QStringList& modeParams, const QString& setter, const QString& prefixSpec) {
+void IRCChannel::applyMode(const QString& modeStr, const QStringList& modeParams, const QString& setter,
+                           const QString& prefixSpec) {
     Q_UNUSED(setter);
     int paramIdx = 0;
 
@@ -81,14 +101,21 @@ void IRCChannel::applyMode(const QString& modeStr, const QStringList& modeParams
     bool adding = true;
     for (int i = 0; i < modeStr.size(); ++i) {
         QChar c = modeStr[i];
-        if (c == '+') { adding = true; continue; }
-        if (c == '-') { adding = false; continue; }
+        if (c == '+') {
+            adding = true;
+            continue;
+        }
+        if (c == '-') {
+            adding = false;
+            continue;
+        }
 
         // c is a mode letter
         if (modeMap.contains(c)) {
             // User mode — consumes a param
             if (paramIdx < modeParams.size()) {
-                IRCUser* user = findUser(modeParams[paramIdx]);
+                int idx = findUserIndex(modeParams[paramIdx]);
+                IRCUser* user = userAt(idx);
                 if (user) {
                     user->setUserPrefix(adding ? QString(modeMap[c]) : QString());
                 }
@@ -98,7 +125,8 @@ void IRCChannel::applyMode(const QString& modeStr, const QStringList& modeParams
             // Channel-level mode — may consume a param
             QSet<QString> modesWithParam = {"k", "l", "b", "e", "d", "I"};
             if (modesWithParam.contains(QString(c))) {
-                if (paramIdx < modeParams.size()) paramIdx++;
+                if (paramIdx < modeParams.size())
+                    paramIdx++;
             }
         }
     }

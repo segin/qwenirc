@@ -1,13 +1,11 @@
 #include "ServerDialog.h"
+#include <QCheckBox>
 #include <QLabel>
 #include <QMessageBox>
-#include <QSettings>
 #include <QRandomGenerator>
-#include <QCheckBox>
+#include <QSettings>
 
-ServerDialog::ServerDialog(QWidget* parent)
-    : QDialog(parent)
-{
+ServerDialog::ServerDialog(QWidget* parent) : QDialog(parent) {
     setWindowTitle("Connect to IRC");
     setMinimumSize(450, 360);
 
@@ -60,14 +58,15 @@ ServerDialog::ServerDialog(QWidget* parent)
 
     m_portEdit->setValidator(new QIntValidator(1, 65535, this));
 
-    m_channelEdit->setValidator(new QRegularExpressionValidator(
-        QRegularExpression("^#?[a-zA-Z0-9_.,\\-]+(,#?[a-zA-Z0-9_.,\\-]+)*$|^$"), this));
+    m_channelEdit->setValidator(
+        new QRegularExpressionValidator(QRegularExpression("^#?[a-zA-Z0-9_.,\\-]+(,#?[a-zA-Z0-9_.,\\-]+)*$|^$"), this));
 
     // Load saved connection settings
     QSettings settings("QwenIRC", "Connection");
     m_hostEdit->setText(settings.value("host", "irc.libera.chat").toString());
     m_portEdit->setText(settings.value("port", "6667").toString());
-    m_nickEdit->setText(settings.value("nick", "guest" + QString::number(QRandomGenerator::global()->bounded(1000))).toString());
+    m_nickEdit->setText(
+        settings.value("nick", "guest" + QString::number(QRandomGenerator::global()->bounded(1000))).toString());
     m_channelEdit->setText(settings.value("channel", "#qwenirc").toString());
     m_tlsCheckBox->setChecked(settings.value("tls", false).toBool());
 }
@@ -89,14 +88,8 @@ void ServerDialog::applyConnection() {
     }
     QString channelStr = channels.join(",");
 
-    emit connectRequested(
-        m_hostEdit->text(),
-        static_cast<quint16>(m_portEdit->text().toUInt()),
-        m_nickEdit->text(),
-        m_passEdit->text(),
-        channelStr,
-        m_tlsCheckBox->isChecked()
-    );
+    emit connectRequested(m_hostEdit->text(), static_cast<quint16>(m_portEdit->text().toUInt()), m_nickEdit->text(),
+                          m_passEdit->text(), channelStr, m_tlsCheckBox->isChecked());
 
     accept();
 }

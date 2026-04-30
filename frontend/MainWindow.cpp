@@ -1,14 +1,14 @@
 #include "MainWindow.h"
 #include "ServerDialog.h"
-#include <QStyledItemDelegate>
-#include <QPainter>
-#include <QApplication>
 #include <QAction>
-#include <QMessageBox>
-#include <QSettings>
-#include <QRandomGenerator>
+#include <QApplication>
 #include <QDir>
 #include <QLabel>
+#include <QMessageBox>
+#include <QPainter>
+#include <QRandomGenerator>
+#include <QSettings>
+#include <QStyledItemDelegate>
 
 class SidebarItemDelegate : public QStyledItemDelegate {
 public:
@@ -17,15 +17,15 @@ public:
     void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override {
         QString text = index.data(Qt::DisplayRole).toString();
         QRect rect = option.rect;
-        
+
         painter->save();
         painter->setBrush(option.palette.brush(QPalette::Base));
         painter->setPen(option.palette.color(QPalette::WindowText));
-        
+
         painter->drawRect(rect);
-        
+
         painter->drawText(rect.adjusted(5, 0, 0, 0), Qt::TextFlag::TextWordWrap, text);
-        
+
         painter->restore();
     }
 
@@ -38,32 +38,11 @@ public:
 };
 
 MainWindow::MainWindow(QWidget* parent)
-    : QMainWindow(parent)
-    , m_network(nullptr)
-    , m_channelTabs(nullptr)
-    , m_channelList(nullptr)
-    , m_userList(nullptr)
-    , m_menuBar(nullptr)
-    , m_menu(nullptr)
-    , m_viewMenu(nullptr)
-    , m_helpMenu(nullptr)
-    , m_channelMenu(nullptr)
-    , m_userMenu(nullptr)
-    , m_toolBar(nullptr)
-    , m_statusBar(nullptr)
-    , m_mainSplitter(nullptr)
-    , m_currentChannel("")
-    , m_serverInfo("")
-    , m_cliHost("")
-    , m_cliPort(6667)
-    , m_cliNick("")
-    , m_cliPass("")
-    , m_cliChannel("")
-    , m_cliTls(false)
-    , m_hasCliArgs(false)
-    , m_disconnectAction(nullptr)
-    , m_serverTab(nullptr)
-{
+    : QMainWindow(parent), m_network(nullptr), m_channelTabs(nullptr), m_channelList(nullptr), m_userList(nullptr),
+      m_menuBar(nullptr), m_menu(nullptr), m_viewMenu(nullptr), m_helpMenu(nullptr), m_channelMenu(nullptr),
+      m_userMenu(nullptr), m_toolBar(nullptr), m_statusBar(nullptr), m_mainSplitter(nullptr), m_currentChannel(""),
+      m_serverInfo(""), m_cliHost(""), m_cliPort(6667), m_cliNick(""), m_cliPass(""), m_cliChannel(""), m_cliTls(false),
+      m_hasCliArgs(false), m_disconnectAction(nullptr), m_serverTab(nullptr) {
     initializeUI();
     createMenus();
     createToolBars();
@@ -72,9 +51,7 @@ MainWindow::MainWindow(QWidget* parent)
     setMinimumSize(800, 600);
 
     // Show connection dialog on startup
-    QTimer::singleShot(0, this, [this]() {
-        showConnectionDialog();
-    });
+    QTimer::singleShot(0, this, [this]() { showConnectionDialog(); });
 }
 
 MainWindow::~MainWindow() {
@@ -83,7 +60,7 @@ MainWindow::~MainWindow() {
 void MainWindow::initializeUI() {
     m_network = new NetworkManager(this);
 
-     // Central widget with vertical layout
+    // Central widget with vertical layout
     QWidget* centralWidget = new QWidget(this);
     QVBoxLayout* centralLayout = new QVBoxLayout(centralWidget);
     centralLayout->setContentsMargins(0, 0, 0, 0);
@@ -96,14 +73,15 @@ void MainWindow::initializeUI() {
     m_channelList = new QListWidget();
     m_channelList->setMinimumWidth(100);
     m_channelList->setItemDelegate(new SidebarItemDelegate(this));
-      mainSplitter->addWidget(m_channelList);
+    mainSplitter->addWidget(m_channelList);
 
     // Channel tabs (QTabWidget)
     m_channelTabs = new QTabWidget();
-   m_channelTabs->tabBar()->setTabsClosable(true);
+    m_channelTabs->tabBar()->setTabsClosable(true);
     connect(m_channelTabs, &QTabWidget::tabCloseRequested, this, [this](int index) {
         QString tabName = m_channelTabs->tabText(index);
-        if (tabName == "Server") return;
+        if (tabName == "Server")
+            return;
         ChannelTab* tab = qobject_cast<ChannelTab*>(m_channelTabs->widget(index));
         if (tab) {
             tab->close();
@@ -126,9 +104,8 @@ void MainWindow::initializeUI() {
     IRCMessageModel* serverMsgModel = new IRCMessageModel(this);
     m_serverTab->setChatModel(serverMsgModel);
     m_channelTabs->addTab(m_serverTab, "Server");
-    connect(m_serverTab, &ChannelTab::messageSent, this, [this](const QString& message) {
-        m_network->sendUserInput("Server", message);
-    });
+    connect(m_serverTab, &ChannelTab::messageSent, this,
+            [this](const QString& message) { m_network->sendUserInput("Server", message); });
 
     setCentralWidget(centralWidget);
 
@@ -143,8 +120,7 @@ void MainWindow::initializeUI() {
             setStatus("Disconnected");
             m_disconnectAction->setEnabled(false);
             break;
-        case NetworkManager::Connecting:
-        {
+        case NetworkManager::Connecting: {
             setStatus("Connecting...");
             m_disconnectAction->setEnabled(true);
             IRCMessage msg(MessageType::Message, "Connecting to " + m_network->serverHost(), "Server");
@@ -162,7 +138,7 @@ void MainWindow::initializeUI() {
         }
     });
 
-  connect(m_network, &NetworkManager::connected, this, [this]() {
+    connect(m_network, &NetworkManager::connected, this, [this]() {
         setStatus("Connected to " + m_network->serverHost());
         IRCMessage msg(MessageType::Message, "Connected to " + m_network->serverHost(), "Server");
         m_serverTab->addMessage(msg);
@@ -177,7 +153,7 @@ void MainWindow::initializeUI() {
     connect(m_network, &NetworkManager::channelMode, this, &MainWindow::onChannelMode);
     connect(m_network, &NetworkManager::userJoined, this, &MainWindow::onUserJoined);
     connect(m_network, &NetworkManager::userLeft, this, &MainWindow::onUserLeft);
-   connect(m_network, &NetworkManager::userChangedNick, this, &MainWindow::onUserChangedNick);
+    connect(m_network, &NetworkManager::userChangedNick, this, &MainWindow::onUserChangedNick);
     connect(m_network, &NetworkManager::channelRegistered, this, &MainWindow::addChannelTab);
     connect(m_network, &NetworkManager::channelUnregistered, this, &MainWindow::removeChannelTab);
     connect(m_network, &NetworkManager::namesReceived, this, &MainWindow::onNamesReceived);
@@ -221,7 +197,7 @@ void MainWindow::initializeUI() {
 }
 
 void MainWindow::createMenus() {
-    QMenuBar *mb = menuBar();
+    QMenuBar* mb = menuBar();
 
     m_menu = new QMenu("&File", mb);
     QAction* connectAction = new QAction("&Connect...", this);
@@ -261,17 +237,13 @@ void MainWindow::createMenus() {
     channelAction->setCheckable(true);
     channelAction->setChecked(true);
     m_viewMenu->addAction(channelAction);
-    connect(channelAction, &QAction::toggled, this, [this](bool checked) {
-        m_channelList->setVisible(checked);
-    });
+    connect(channelAction, &QAction::toggled, this, [this](bool checked) { m_channelList->setVisible(checked); });
 
     QAction* userAction = new QAction("&User List", this);
     userAction->setCheckable(true);
     userAction->setChecked(true);
     m_viewMenu->addAction(userAction);
-    connect(userAction, &QAction::toggled, this, [this](bool checked) {
-        m_userList->setVisible(checked);
-    });
+    connect(userAction, &QAction::toggled, this, [this](bool checked) { m_userList->setVisible(checked); });
     mb->addMenu(m_viewMenu);
 
     m_helpMenu = new QMenu("&Help", mb);
@@ -280,14 +252,14 @@ void MainWindow::createMenus() {
     m_helpMenu->addAction(helpAction);
     connect(helpAction, &QAction::triggered, this, [this]() {
         QMessageBox::about(this, "About QwenIRC",
-            "QwenIRC - A Qt6 IRC Client\n"
-            "Version 0.1.0\n\n"
-            "Supporting IRCv3 capabilities including:\n"
-            "- Message Tags\n"
-            "- Account Notification\n"
-            "- Away Notification\n"
-            "- Echo Message\n"
-            "- Multi-prefix");
+                           "QwenIRC - A Qt6 IRC Client\n"
+                           "Version 0.1.0\n\n"
+                           "Supporting IRCv3 capabilities including:\n"
+                           "- Message Tags\n"
+                           "- Account Notification\n"
+                           "- Away Notification\n"
+                           "- Echo Message\n"
+                           "- Multi-prefix");
     });
     mb->addMenu(m_helpMenu);
 }
@@ -302,9 +274,7 @@ void MainWindow::createToolBars() {
     QAction* disconnectAction = new QAction("Disconnect", this);
     disconnectAction->setEnabled(false);
     m_toolBar->addAction(disconnectAction);
-    connect(disconnectAction, &QAction::triggered, this, [this]() {
-        m_network->disconnect();
-    });
+    connect(disconnectAction, &QAction::triggered, this, [this]() { m_network->disconnect(); });
     m_disconnectAction = disconnectAction;
 
     m_toolBar->addSeparator();
@@ -312,8 +282,7 @@ void MainWindow::createToolBars() {
     m_toolBar->addActions(m_viewMenu->actions());
 }
 
-void MainWindow::setConnectionArgs(const QString& host, quint16 port,
-                                   const QString& nick, const QString& pass,
+void MainWindow::setConnectionArgs(const QString& host, quint16 port, const QString& nick, const QString& pass,
                                    const QString& channel, bool useTLS) {
     m_cliHost = host;
     m_cliPort = port;
@@ -347,8 +316,7 @@ void MainWindow::setStatus(const QString& status) {
     }
 }
 
-void MainWindow::onConnect(const QString& host, quint16 port,
-                           const QString& nick, const QString& pass,
+void MainWindow::onConnect(const QString& host, quint16 port, const QString& nick, const QString& pass,
                            const QString& channel, bool useTLS) {
     m_network->connectToServer(host, port, nick, pass, channel, useTLS);
 }
@@ -364,7 +332,7 @@ void MainWindow::onServerError(const QString& error) {
     m_serverTab->addMessage(msg);
 }
 
-  void MainWindow::onServerMessage(const QString& message) {
+void MainWindow::onServerMessage(const QString& message) {
     IRCMessage msg(MessageType::Message, message, "Server");
     m_serverTab->addMessage(msg);
     setStatus(message);
@@ -421,9 +389,7 @@ void MainWindow::onUserLeft(const QString& channel, const QString& nick, const Q
 }
 
 void MainWindow::onUserChangedNick(const QString& oldNick, const QString& newNick) {
-    IRCMessage msg(MessageType::NickChange,
-        QString("%1 -> %2").arg(oldNick).arg(newNick),
-        oldNick);
+    IRCMessage msg(MessageType::NickChange, QString("%1 -> %2").arg(oldNick).arg(newNick), oldNick);
 
     // Post to all channel tabs where old nick was present
     for (auto it = m_network->channels().begin(); it != m_network->channels().end(); ++it) {
@@ -440,7 +406,7 @@ void MainWindow::onUserChangedNick(const QString& oldNick, const QString& newNic
     if (!m_currentChannel.isEmpty()) {
         QRegularExpression re("[~&@%+]");
         IRCChannel* ch = m_network->channel(m_currentChannel);
-        IRCUser* user = ch ? ch->findUser(oldNick) : nullptr;
+        IRCUser* user = ch ? ch->findUser(newNick) : nullptr;
         for (int i = 0; i < m_userList->count(); ++i) {
             QString text = m_userList->item(i)->text();
             QString bareNick = text;
@@ -466,11 +432,10 @@ void MainWindow::addChannelTab(const QString& name) {
     m_channelModels[name] = msgModel;
 
     // Add tab
-     ChannelTab* tab = new ChannelTab(name, m_network);
+    ChannelTab* tab = new ChannelTab(name, m_network);
     tab->setChatModel(msgModel);
-    connect(tab, &ChannelTab::messageSent, this, [this, name](const QString& message) {
-        m_network->sendUserInput(name, message);
-    });
+    connect(tab, &ChannelTab::messageSent, this,
+            [this, name](const QString& message) { m_network->sendUserInput(name, message); });
 
     m_channelTabs->addTab(tab, name);
     m_channelList->addItem(name);
@@ -536,9 +501,8 @@ void MainWindow::addQueryTab(const QString& name) {
     ChannelTab* tab = new ChannelTab(name, m_network);
     tab->setChatModel(msgModel);
     tab->setTopicVisible(false);
-    connect(tab, &ChannelTab::messageSent, this, [this, name](const QString& message) {
-        m_network->sendUserInput(name, message);
-    });
+    connect(tab, &ChannelTab::messageSent, this,
+            [this, name](const QString& message) { m_network->sendUserInput(name, message); });
 
     m_channelTabs->insertTab(0, tab, name);
     m_channelTabs->setCurrentWidget(tab);

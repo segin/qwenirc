@@ -1,9 +1,9 @@
 #ifndef IRCMODELS_H
 #define IRCMODELS_H
 
+#include "IRCChannel.h"
 #include "IRCMessage.h"
 #include "IRCUser.h"
-#include "IRCChannel.h"
 #include <QAbstractListModel>
 #include <QList>
 #include <QSet>
@@ -21,11 +21,7 @@ public:
     int rowCount(const QModelIndex& parent = {}) const override;
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
 
-    enum IRCMessageRoles {
-        TextRole = Qt::UserRole,
-        TypeRole,
-        ColorRole
-    };
+    enum IRCMessageRoles { TextRole = Qt::UserRole, TypeRole, ColorRole };
 
     Q_ENUM(IRCMessageRoles)
 
@@ -51,9 +47,7 @@ public:
     int rowCount(const QModelIndex& parent = {}) const override;
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
 
-    enum IRCUserRoles {
-        NickRole = Qt::UserRole
-    };
+    enum IRCUserRoles { NickRole = Qt::UserRole };
 
     Q_ENUM(IRCUserRoles)
 
@@ -77,10 +71,7 @@ public:
     int rowCount(const QModelIndex& parent = {}) const override;
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
 
-    enum IRCChannelRoles {
-        NameRole = Qt::UserRole,
-        ActiveRole
-    };
+    enum IRCChannelRoles { NameRole = Qt::UserRole, ActiveRole };
 
     Q_ENUM(IRCChannelRoles)
 

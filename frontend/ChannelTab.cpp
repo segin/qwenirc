@@ -3,19 +3,15 @@
 #include <QLabel>
 #include <QTabWidget>
 
- ChannelTab::ChannelTab(const QString& name, NetworkManager* nm, QWidget* parent)
-    : QWidget(parent)
-    , m_channelName(name)
-    , m_chatWidget(nullptr)
-    , m_inputEdit(nullptr)
-{
+ChannelTab::ChannelTab(const QString& name, NetworkManager* nm, QWidget* parent)
+    : QWidget(parent), m_channelName(name), m_chatWidget(nullptr), m_inputEdit(nullptr) {
     Q_UNUSED(nm);
     initializeUI();
 }
 
 void ChannelTab::initializeUI() {
     m_mainLayout = new QVBoxLayout(this);
-     m_mainLayout->setContentsMargins(0, 0, 0, 0);
+    m_mainLayout->setContentsMargins(0, 0, 0, 0);
     m_mainLayout->setSpacing(0);
 
     m_chatWidget = new ChatWidget();
@@ -24,9 +20,9 @@ void ChannelTab::initializeUI() {
     m_mainLayout->addWidget(m_chatWidget, 1);
 
     QHBoxLayout* inputLayout = new QHBoxLayout();
-      inputLayout->setContentsMargins(0, 0, 0, 0);
+    inputLayout->setContentsMargins(0, 0, 0, 0);
 
-  m_inputEdit = new QLineEdit();
+    m_inputEdit = new QLineEdit();
     m_inputEdit->setPlaceholderText("Type a message...");
     inputLayout->addWidget(m_inputEdit, 1);
 
@@ -34,7 +30,8 @@ void ChannelTab::initializeUI() {
 
     connect(m_inputEdit, &QLineEdit::returnPressed, this, [this]() {
         QString text = m_inputEdit->text();
-        if (text.isEmpty()) return;
+        if (text.isEmpty())
+            return;
         emit messageSent(text);
         m_inputEdit->clear();
     });
@@ -69,7 +66,7 @@ void ChannelTab::setMode(const QString& mode) {
 }
 
 void ChannelTab::close() {
-    QTabWidget* tw = qobject_cast<QTabWidget*>(parentWidget());
+    QTabWidget* tw = parentWidget() ? qobject_cast<QTabWidget*>(parentWidget()->parentWidget()) : nullptr;
     if (tw) {
         int idx = tw->indexOf(this);
         if (idx >= 0) {

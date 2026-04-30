@@ -1,13 +1,13 @@
 #ifndef SERVERDIALOG_H
 #define SERVERDIALOG_H
 
-#include <QDialog>
-#include <QLineEdit>
-#include <QGridLayout>
-#include <QPushButton>
-#include <QIntValidator>
-#include <QRegularExpression>
 #include <QCheckBox>
+#include <QDialog>
+#include <QGridLayout>
+#include <QIntValidator>
+#include <QLineEdit>
+#include <QPushButton>
+#include <QRegularExpression>
 #include <QRegularExpressionValidator>
 
 class ServerDialog : public QDialog {
@@ -18,10 +18,10 @@ public:
 
     QString host() const { return m_hostEdit->text(); }
     quint16 port() const {
-    bool ok;
-    uint val = m_portEdit->text().toUInt(&ok);
-    return ok ? static_cast<quint16>(val) : 6667;
-}
+        bool ok;
+        uint val = m_portEdit->text().toUInt(&ok);
+        return ok ? static_cast<quint16>(val) : 6667;
+    }
     QString nick() const { return m_nickEdit->text(); }
     QString password() const { return m_passEdit->text(); }
     QString channel() const { return m_channelEdit->text(); }
@@ -34,8 +34,7 @@ public:
     void setUseTLS(bool enabled) { m_tlsCheckBox->setChecked(enabled); }
 
 signals:
-    void connectRequested(const QString& host, quint16 port,
-                          const QString& nick, const QString& pass,
+    void connectRequested(const QString& host, quint16 port, const QString& nick, const QString& pass,
                           const QString& channel, bool useTLS);
 
 private:
@@ -49,6 +48,6 @@ private:
     QPushButton* m_connectBtn;
     QPushButton* m_cancelBtn;
     QCheckBox* m_tlsCheckBox;
- };
+};
 
 #endif // SERVERDIALOG_H

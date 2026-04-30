@@ -1,11 +1,12 @@
 #ifndef IRCCHANNEL_H
 #define IRCCHANNEL_H
 
-#include "IRCUser.h"
 #include "IRCMessage.h"
-#include <QString>
+#include "IRCMessageModel.h"
+#include "IRCUser.h"
 #include <QList>
 #include <QSet>
+#include <QString>
 
 class IRCChannel {
 public:
@@ -15,6 +16,9 @@ public:
     QString topic() const { return m_topic; }
     QList<IRCUser> users() const { return m_users; }
     IRCUser* findUser(const QString& nick);
+    int findUserIndex(const QString& nick) const;
+    IRCUser* userAt(int index);
+    const IRCUser* userAt(int index) const;
     QList<IRCMessage> messages() const { return m_messages; }
     QString prefix() const { return m_prefix; }
 
@@ -24,10 +28,10 @@ public:
     void removeUser(const QString& nick);
     void addMessage(const IRCMessage& msg);
     void clear();
-    void applyMode(const QString& modeStr, const QStringList& modeParams, const QString& setter, const QString& prefixSpec = "");
+    void applyMode(const QString& modeStr, const QStringList& modeParams, const QString& setter,
+                   const QString& prefixSpec = "");
 
 private:
-    static const int MAX_MESSAGES = 10000;
     QString m_name;
     QString m_topic;
     QString m_prefix;

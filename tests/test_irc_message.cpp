@@ -1,5 +1,5 @@
-#include <QtTest/QtTest>
 #include "../backend/IRCMessage.h"
+#include <QtTest/QtTest>
 
 class TestIRCMessage : public QObject {
     Q_OBJECT

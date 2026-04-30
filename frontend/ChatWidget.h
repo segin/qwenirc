@@ -4,11 +4,11 @@
 #include "backend/IRCMessage.h"
 #include "backend/IRCMessageModel.h"
 #include "backend/IRCUser.h"
-#include <QWidget>
+#include <QAbstractItemModel>
 #include <QListView>
 #include <QTextEdit>
 #include <QVBoxLayout>
-#include <QAbstractItemModel>
+#include <QWidget>
 
 class ChatWidget : public QWidget {
     Q_OBJECT

@@ -15,7 +15,7 @@ int main(int argc, char* argv[]) {
     parser.addHelpOption();
     parser.addVersionOption();
 
-    QCommandLineOption hostOption(QStringList{"h", "host"}, "Server hostname", "host");
+    QCommandLineOption hostOption(QStringList{"server", "host"}, "Server hostname", "host");
     parser.addOption(hostOption);
 
     QCommandLineOption portOption(QStringList{"p", "port"}, "Server port (default 6667)", "port");
@@ -33,16 +33,11 @@ int main(int argc, char* argv[]) {
     QApplication::setStyle(QStyleFactory::create("Fusion"));
 
     MainWindow window;
-    if (parser.isSet(hostOption) || parser.isSet(portOption) || parser.isSet("nick")
-            || parser.isSet("pass") || parser.isSet("channel") || parser.isSet(tlsOption)) {
-        window.setConnectionArgs(
-            parser.value(hostOption),
-            static_cast<quint16>(parser.value(portOption).toUInt()),
-            parser.value("nick"),
-            parser.value("pass"),
-            parser.value("channel"),
-            parser.isSet(tlsOption)
-        );
+    if (parser.isSet(hostOption) || parser.isSet(portOption) || parser.isSet("nick") || parser.isSet("pass") ||
+        parser.isSet("channel") || parser.isSet(tlsOption)) {
+        window.setConnectionArgs(parser.value(hostOption), static_cast<quint16>(parser.value(portOption).toUInt()),
+                                 parser.value("nick"), parser.value("pass"), parser.value("channel"),
+                                 parser.isSet(tlsOption));
     }
     window.show();
 

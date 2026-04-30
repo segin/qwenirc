@@ -2,43 +2,37 @@
 #define NETWORKMANAGER_H
 
 #include "IRCChannel.h"
-#include "IRCUser.h"
 #include "IRCMessage.h"
-#include <QSet>
-#include <QTcpSocket>
-#include <QSslSocket>
-#include <QTimer>
-#include <QMap>
-#include <QStringList>
+#include "IRCUser.h"
 #include <QByteArray>
-#include <QFile>
-#include <QTextStream>
 #include <QDir>
+#include <QFile>
+#include <QMap>
+#include <QSet>
+#include <QSslSocket>
+#include <QStringList>
+#include <QTcpSocket>
+#include <QTextStream>
+#include <QTimer>
 
 class NetworkManager : public QObject {
     Q_OBJECT
 
 public:
-    enum State {
-        Disconnected,
-        Connecting,
-        Connected,
-        Error
-    };
+    enum State { Disconnected, Connecting, Connected, Error };
 
     explicit NetworkManager(QObject* parent = nullptr);
     ~NetworkManager() override;
 
-  void connectToServer(const QString& host, quint16 port,
-                          const QString& nick, const QString& pass = {},
-                          const QString& channel = {}, bool useTLS = false);
+    void connectToServer(const QString& host, quint16 port, const QString& nick, const QString& pass = {},
+                         const QString& channel = {}, bool useTLS = false);
     void disconnect();
     void sendMessage(const QString& channel, const QString& message);
     void joinChannel(const QString& channel);
     void sendUserInput(const QString& context, const QString& text);
     void sendNotice(const QString& target, const QString& text);
     void setNick(const QString& nick);
-   void changeMode(const QString& target, const QString& mode);
+    void changeMode(const QString& target, const QString& mode);
     void setTopic(const QString& channel, const QString& topic);
     void whois(const QString& nick);
 
@@ -108,7 +102,8 @@ private:
     void handleQuit(const QString& prefix, const QStringList& params, const QString& serverTime = {});
     void handleKick(const QString& prefix, const QStringList& params, const QString& serverTime = {});
     void handleCapCommand(const QStringList& params);
-    void handleNumericReply(const QString& numeric, const QString& prefix, const QStringList& params, const QString& serverTime = {});
+    void handleNumericReply(const QString& numeric, const QString& prefix, const QStringList& params,
+                            const QString& serverTime = {});
 
     virtual void sendRaw(const QString& data);
     void sendCommand(const QString& cmd, const QStringList& params);
@@ -123,6 +118,7 @@ private:
     QString m_nick;
     QString m_pass;
     QString m_currentChannel;
+    bool m_hasSentCapLs = false;
 
     QMap<QString, IRCChannel*> m_channels;
     State m_state;
@@ -141,10 +137,10 @@ private:
     QSet<QChar> m_prefixSymbols;
 
     QString m_trafficLogDir;
-    QString m_trafficLogFile;
-    QFile* m_trafficLog;
-    QTextStream* m_trafficLogStream;
+    QFile* m_trafficLog = nullptr;
+    QTextStream* m_trafficLogStream = nullptr;
     void logTraffic(const QString& data, bool outgoing);
+    void closeTrafficLog();
 
     friend class TestIrcParser;
 };

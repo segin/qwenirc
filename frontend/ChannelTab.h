@@ -1,14 +1,14 @@
 #ifndef CHANNELTAB_H
 #define CHANNELTAB_H
 
+#include "ChatWidget.h"
 #include "backend/IRCMessage.h"
 #include "backend/IRCUser.h"
 #include "backend/NetworkManager.h"
-#include "ChatWidget.h"
-#include <QWidget>
-#include <QVBoxLayout>
-#include <QLineEdit>
 #include <QAbstractItemModel>
+#include <QLineEdit>
+#include <QVBoxLayout>
+#include <QWidget>
 
 class ChannelTab : public QWidget {
     Q_OBJECT
@@ -16,7 +16,7 @@ class ChannelTab : public QWidget {
 public:
     explicit ChannelTab(const QString& name, NetworkManager* nm, QWidget* parent = nullptr);
 
-     void setTopic(const QString& topic);
+    void setTopic(const QString& topic);
     void setTopicVisible(bool visible);
     void setMode(const QString& mode);
     void addMessage(const IRCMessage& msg);

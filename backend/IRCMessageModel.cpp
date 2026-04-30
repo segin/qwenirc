@@ -1,11 +1,10 @@
 #include "IRCMessageModel.h"
 #include <QAbstractItemDelegate>
+#include <QColor>
 
 // ---- IRCMessageModel ----
 
-IRCMessageModel::IRCMessageModel(QObject* parent)
-    : QAbstractListModel(parent)
-{
+IRCMessageModel::IRCMessageModel(QObject* parent) : QAbstractListModel(parent) {
 }
 
 void IRCMessageModel::addMessage(const IRCMessage& msg) {
@@ -44,22 +43,33 @@ QVariant IRCMessageModel::data(const QModelIndex& index, int role) const {
     const auto& msg = m_messages[index.row()];
 
     switch (role) {
-case Qt::DisplayRole:
-         return msg.coloredText();
-     case TypeRole:
-         return static_cast<int>(msg.type());
-     case ColorRole:
-         return msg.coloredText();
-     default:
-         return {};
+    case Qt::DisplayRole:
+        return msg.coloredText();
+    case TypeRole:
+        return static_cast<int>(msg.type());
+    case ColorRole:
+        switch (msg.type()) {
+        case MessageType::NickChange:       return QVariant::fromValue(QColor("#FF8888"));
+        case MessageType::Join:             return QVariant::fromValue(QColor("#88FF88"));
+        case MessageType::Part:
+        case MessageType::Quit:
+        case MessageType::Kick:             return QVariant::fromValue(QColor("#FF8888"));
+        case MessageType::Mode:
+        case MessageType::Topic:
+        case MessageType::TopicSet:         return QVariant::fromValue(QColor("#8888FF"));
+        case MessageType::Error:            return QVariant::fromValue(QColor("#FF0000"));
+        case MessageType::Notice:           return QVariant::fromValue(QColor("#AAAAAA"));
+        case MessageType::System:           return QVariant::fromValue(QColor("#888888"));
+        default:                            return {};
+        }
+    default:
+        return {};
     }
 }
 
 // ---- IRCUserModel ----
 
-IRCUserModel::IRCUserModel(QObject* parent)
-    : QAbstractListModel(parent)
-{
+IRCUserModel::IRCUserModel(QObject* parent) : QAbstractListModel(parent) {
 }
 
 void IRCUserModel::setUsers(const QList<IRCUser>& users) {
@@ -117,9 +127,9 @@ QVariant IRCUserModel::data(const QModelIndex& index, int role) const {
     const auto& user = m_users[index.row()];
 
     switch (role) {
-case Qt::DisplayRole: {
-         return QString("%1%2").arg(user.userPrefix()).arg(user.nick());
-     }
+    case Qt::DisplayRole: {
+        return QString("%1%2").arg(user.userPrefix()).arg(user.nick());
+    }
     case NickRole:
         return user.nick();
     default:
@@ -129,9 +139,7 @@ case Qt::DisplayRole: {
 
 // ---- IRCChannelModel ----
 
-IRCChannelModel::IRCChannelModel(QObject* parent)
-    : QAbstractListModel(parent)
-{
+IRCChannelModel::IRCChannelModel(QObject* parent) : QAbstractListModel(parent) {
 }
 
 void IRCChannelModel::addChannel(const QString& name) {
@@ -164,7 +172,8 @@ void IRCChannelModel::clear() {
 
 void IRCChannelModel::setCurrentChannel(const QString& name) {
     m_currentChannel = name;
-    if (m_channels.isEmpty()) return;
+    if (m_channels.isEmpty())
+        return;
     emit dataChanged(index(0, 0), index(m_channels.size() - 1, 0));
 }
 

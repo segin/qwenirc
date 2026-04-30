@@ -15,7 +15,8 @@ public:
     IRCUser& operator=(IRCUser&&) = default;
 
     bool operator==(const IRCUser& other) const {
-        return m_nick == other.m_nick && m_ident == other.m_ident && m_host == other.m_host && m_userPrefix == other.m_userPrefix;
+        return m_nick == other.m_nick && m_ident == other.m_ident && m_host == other.m_host &&
+               m_userPrefix == other.m_userPrefix;
     }
 
     QString nick() const { return m_nick; }

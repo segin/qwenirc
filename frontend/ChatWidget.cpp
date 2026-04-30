@@ -1,18 +1,18 @@
 #include "ChatWidget.h"
 #include "backend/IRCMessageModel.h"
-#include <QLabel>
-#include <QDateTime>
-#include <QScrollBar>
-#include <QKeyEvent>
-#include <QStyledItemDelegate>
-#include <QPainter>
-#include <QFrame>
 #include <QApplication>
-#include <QTextDocument>
-#include <QTextBlock>
-#include <QTextLength>
-#include <QPalette>
 #include <QClipboard>
+#include <QDateTime>
+#include <QFrame>
+#include <QKeyEvent>
+#include <QLabel>
+#include <QPainter>
+#include <QPalette>
+#include <QScrollBar>
+#include <QStyledItemDelegate>
+#include <QTextBlock>
+#include <QTextDocument>
+#include <QTextLength>
 
 class ChatItemDelegate : public QStyledItemDelegate {
 public:
@@ -47,17 +47,12 @@ public:
 };
 
 ChatWidget::ChatWidget(QWidget* parent)
-    : QWidget(parent)
-    , m_chatModel(nullptr)
-    , m_channelName("")
-    , m_topicEdit(nullptr)
-    , m_chatList(nullptr)
-{
-      m_mainLayout = new QVBoxLayout(this);
+    : QWidget(parent), m_chatModel(nullptr), m_channelName(""), m_topicEdit(nullptr), m_chatList(nullptr) {
+    m_mainLayout = new QVBoxLayout(this);
     m_mainLayout->setContentsMargins(0, 0, 0, 0);
     m_mainLayout->setSpacing(0);
 
-     m_topicEdit = new QTextEdit();
+    m_topicEdit = new QTextEdit();
     m_topicEdit->setPlaceholderText("Channel topic will appear here...");
     m_topicEdit->setReadOnly(true);
     m_topicEdit->setMaximumHeight(40);
@@ -65,7 +60,7 @@ ChatWidget::ChatWidget(QWidget* parent)
     m_topicEdit->document()->setPlainText("Topic: No topic set");
     m_mainLayout->addWidget(m_topicEdit);
 
-     m_chatList = new QListView();
+    m_chatList = new QListView();
     m_chatList->setItemDelegate(new ChatItemDelegate(this));
     m_chatList->setWordWrap(true);
     m_chatList->setFrameShape(QFrame::NoFrame);
@@ -117,7 +112,8 @@ void ChatWidget::setChannelName(const QString& name) {
 }
 
 void ChatWidget::scrollToBottom() {
-    if (!m_chatList || m_chatList->model() == nullptr) return;
+    if (!m_chatList || m_chatList->model() == nullptr)
+        return;
 
     QScrollBar* scroll = m_chatList->verticalScrollBar();
     if (scroll) {
@@ -129,9 +125,11 @@ void ChatWidget::scrollToBottom() {
 }
 
 void ChatWidget::copySelectedText() {
-    if (!m_chatList || !m_chatList->model()) return;
+    if (!m_chatList || !m_chatList->model())
+        return;
     auto indexes = m_chatList->selectionModel()->selectedIndexes();
-    if (indexes.isEmpty()) return;
+    if (indexes.isEmpty())
+        return;
     QString text = indexes.first().data(Qt::DisplayRole).toString();
     QTextDocument doc;
     doc.setHtml(text);

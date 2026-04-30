@@ -1,24 +1,24 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
-#include "backend/NetworkManager.h"
-#include "backend/IRCUser.h"
-#include "backend/IRCMessageModel.h"
 #include "ChannelTab.h"
-#include <QMainWindow>
-#include <QTabWidget>
-#include <QListWidget>
-#include <QMenuBar>
-#include <QMenu>
-#include <QToolBar>
-#include <QStatusBar>
-#include <QVBoxLayout>
+#include "backend/IRCMessageModel.h"
+#include "backend/IRCUser.h"
+#include "backend/NetworkManager.h"
+#include <QAbstractItemModel>
 #include <QHBoxLayout>
+#include <QList>
+#include <QListWidget>
+#include <QMainWindow>
+#include <QMenu>
+#include <QMenuBar>
+#include <QRegularExpression>
 #include <QSplitter>
 #include <QStackedWidget>
-#include <QList>
-#include <QAbstractItemModel>
-#include <QRegularExpression>
+#include <QStatusBar>
+#include <QTabWidget>
+#include <QToolBar>
+#include <QVBoxLayout>
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -26,14 +26,12 @@ class MainWindow : public QMainWindow {
 public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
-    void setConnectionArgs(const QString& host, quint16 port,
-                           const QString& nick, const QString& pass,
+    void setConnectionArgs(const QString& host, quint16 port, const QString& nick, const QString& pass,
                            const QString& channel, bool useTLS);
 
 private slots:
-    void onConnect(const QString& host, quint16 port,
-                   const QString& nick, const QString& pass,
-                   const QString& channel, bool useTLS);
+    void onConnect(const QString& host, quint16 port, const QString& nick, const QString& pass, const QString& channel,
+                   bool useTLS);
     void onDisconnected();
     void onServerError(const QString& error);
     void onServerMessage(const QString& message);
@@ -47,7 +45,7 @@ private slots:
     void addChannelTab(const QString& name);
     void removeChannelTab(const QString& name);
     void setStatus(const QString& status);
-   void onNamesReceived(const QString& channel, const QList<IRCUser>& users);
+    void onNamesReceived(const QString& channel, const QList<IRCUser>& users);
     void onNamesComplete(const QString& channel);
 
     void addQueryTab(const QString& name);

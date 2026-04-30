@@ -1,24 +1,20 @@
-  #include <QtTest/QtTest>
-#include <QSet>
-#include <QDateTime>
 #include <QAbstractSocket>
+#include <QDateTime>
+#include <QSet>
+#include <QtTest/QtTest>
 
-#include "../backend/NetworkManager.h"
 #include "../backend/IRCChannel.h"
-#include "../backend/IRCUser.h"
 #include "../backend/IRCMessage.h"
+#include "../backend/IRCUser.h"
+#include "../backend/NetworkManager.h"
 
 // Test subclass that captures sent commands and signals
 class TestNetworkManager : public NetworkManager {
     Q_OBJECT
 public:
-    explicit TestNetworkManager(QObject* parent = nullptr)
-        : NetworkManager(parent)
-    {}
+    explicit TestNetworkManager(QObject* parent = nullptr) : NetworkManager(parent) {}
 
-    void sendRaw(const QString& data) override {
-        m_sentCommands.append(data);
-    }
+    void sendRaw(const QString& data) override { m_sentCommands.append(data); }
 
     QStringList sentCommands() const { return m_sentCommands; }
     void clearCommands() { m_sentCommands.clear(); }
@@ -35,9 +31,7 @@ public:
     QString lastUserReceivedNick;
 
 public Q_SLOTS:
-    void captureServerChannelMessage(const QString& msg) {
-        lastServerChannelMessage = msg;
-    }
+    void captureServerChannelMessage(const QString& msg) { lastServerChannelMessage = msg; }
     void captureChannelMessage(const QString& channel, const IRCMessage& msg) {
         lastChannelMessageChannel = channel;
         lastChannelMessage = msg;
@@ -68,12 +62,10 @@ private slots:
     // 353 RPL_NAMREPLY test
     void test353NamReply() {
         TestNetworkManager mgr;
-        connect(&mgr, SIGNAL(serverChannelMessage(QString)),
-                &mgr, SLOT(captureServerChannelMessage(QString)));
-        connect(&mgr, SIGNAL(namesReceived(QString,QList<IRCUser>)),
-                &mgr, SLOT(captureNamesReceived(QString,QList<IRCUser>)));
-        connect(&mgr, SIGNAL(userReceived(QString,QString)),
-                &mgr, SLOT(captureUserReceived(QString,QString)));
+        connect(&mgr, SIGNAL(serverChannelMessage(QString)), &mgr, SLOT(captureServerChannelMessage(QString)));
+        connect(&mgr, SIGNAL(namesReceived(QString, QList<IRCUser>)), &mgr,
+                SLOT(captureNamesReceived(QString, QList<IRCUser>)));
+        connect(&mgr, SIGNAL(userReceived(QString, QString)), &mgr, SLOT(captureUserReceived(QString, QString)));
 
         // Simulated server line: :server 353 me = #chan :@op +voice user
         mgr.parseLine(":server 353 me = #chan :@op +voice user");
@@ -89,22 +81,24 @@ private slots:
         IRCUser* voice = nullptr;
         IRCUser* user = nullptr;
         for (const IRCUser& u : mgr.lastNamesUsers) {
-            if (u.nick() == "op" && u.userPrefix() == "@") op = const_cast<IRCUser*>(&u);
-            else if (u.nick() == "voice" && u.userPrefix() == "+") voice = const_cast<IRCUser*>(&u);
-            else if (u.nick() == "user" && u.userPrefix().isEmpty()) user = const_cast<IRCUser*>(&u);
+            if (u.nick() == "op" && u.userPrefix() == "@")
+                op = const_cast<IRCUser*>(&u);
+            else if (u.nick() == "voice" && u.userPrefix() == "+")
+                voice = const_cast<IRCUser*>(&u);
+            else if (u.nick() == "user" && u.userPrefix().isEmpty())
+                user = const_cast<IRCUser*>(&u);
         }
         QVERIFY(op != nullptr);
         QVERIFY(voice != nullptr);
         QVERIFY(user != nullptr);
     }
 
-     // Timestamp + 332 topic test
+    // Timestamp + 332 topic test
     void testTimestamp332Topic() {
         TestNetworkManager mgr;
-        connect(&mgr, SIGNAL(channelTopic(QString,QString)),
-                &mgr, SLOT(captureChannelTopic(QString,QString)));
-        connect(&mgr, SIGNAL(channelMessage(QString,IRCMessage)),
-                &mgr, SLOT(captureChannelMessage(QString,IRCMessage)));
+        connect(&mgr, SIGNAL(channelTopic(QString, QString)), &mgr, SLOT(captureChannelTopic(QString, QString)));
+        connect(&mgr, SIGNAL(channelMessage(QString, IRCMessage)), &mgr,
+                SLOT(captureChannelMessage(QString, IRCMessage)));
 
         // Simulated: @time=2024-01-01T12:00:00Z :srv 332 me #chan :topic
         mgr.parseLine("@time=2024-01-01T12:00:00Z :srv 332 me #chan :topic");
@@ -116,9 +110,10 @@ private slots:
         QVERIFY(!mgr.lastChannelMessage.timestamp().isNull());
         QString tsStr = mgr.lastChannelMessage.timestamp().toString(Qt::ISODate);
         QVERIFY2(tsStr == "2024-01-01T12:00:00", ("timestamp mismatch: " + tsStr).toUtf8().data());
-        
+
         // Debug: verify the serverTime tag was extracted
-        QVERIFY2(mgr.lastChannelMessage.timestamp().toString("yyyy") == "2024", QString("year mismatch").toUtf8().data());
+        QVERIFY2(mgr.lastChannelMessage.timestamp().toString("yyyy") == "2024",
+                 QString("year mismatch").toUtf8().data());
         QVERIFY2(mgr.lastChannelMessage.timestamp().toString("MM") == "01", QString("month mismatch").toUtf8().data());
         QVERIFY2(mgr.lastChannelMessage.timestamp().toString("dd") == "01", QString("day mismatch").toUtf8().data());
         QVERIFY2(mgr.lastChannelMessage.timestamp().toString("HH") == "12", QString("hour mismatch").toUtf8().data());
@@ -127,8 +122,7 @@ private slots:
     // PING -> PONG test
     void testPingPong() {
         TestNetworkManager mgr;
-        connect(&mgr, SIGNAL(serverChannelMessage(QString)),
-                &mgr, SLOT(captureServerChannelMessage(QString)));
+        connect(&mgr, SIGNAL(serverChannelMessage(QString)), &mgr, SLOT(captureServerChannelMessage(QString)));
 
         mgr.clearCommands();
 
@@ -159,11 +153,10 @@ private slots:
         QCOMPARE(mgr.lastServerChannelMessage, QString());
     }
 
-      // CAP LS intersection + REQ test
+    // CAP LS intersection + REQ test
     void testCapLSIntersection() {
         TestNetworkManager mgr;
-        connect(&mgr, SIGNAL(serverChannelMessage(QString)),
-                &mgr, SLOT(captureServerChannelMessage(QString)));
+        connect(&mgr, SIGNAL(serverChannelMessage(QString)), &mgr, SLOT(captureServerChannelMessage(QString)));
 
         mgr.clearCommands();
 
@@ -214,22 +207,14 @@ private slots:
 
         // Final LS should trigger CAP REQ
         QStringList cmds = mgr.sentCommands();
-        bool foundCapReq = false;
-        for (const QString& cmd : cmds) {
-            if (cmd.startsWith("CAP REQ")) {
-                foundCapReq = true;
-                break;
-            }
-        }
-        QVERIFY(foundCapReq);
-
         QString capReqCmd;
-        for (const QString& cmd : cmds) {
-            if (cmd.startsWith("CAP REQ")) {
-                capReqCmd = cmd;
-                break;
+        for (int i = 0; i < cmds.size(); ++i) {
+            if (cmds[i].startsWith("CAP REQ")) {
+                capReqCmd = cmds[i];
             }
         }
+        QVERIFY(!capReqCmd.isEmpty());
+
         QString combined = capReqCmd.toLower();
         QVERIFY(combined.contains("sasl"));
         QVERIFY(combined.contains("server-time"));

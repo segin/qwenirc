@@ -1,11 +1,11 @@
-#include <QtTest/QtTest>
 #include <QAbstractSocket>
+#include <QtTest/QtTest>
 
-#include "../backend/NetworkManager.h"
 #include "../backend/IRCChannel.h"
-#include "../backend/IRCUser.h"
 #include "../backend/IRCMessage.h"
 #include "../backend/IRCMessageModel.h"
+#include "../backend/IRCUser.h"
+#include "../backend/NetworkManager.h"
 
 class TestIRCUserModel : public QObject {
     Q_OBJECT
@@ -41,7 +41,7 @@ private slots:
         IRCUser user2("bob", "bob", "host2");
         user2.setUserPrefix("+");
 
-        QList<IRCUser> users = { user1, user2 };
+        QList<IRCUser> users = {user1, user2};
         model.setUsers(users);
         QCOMPARE(model.users().size(), 2);
 
@@ -72,14 +72,11 @@ private slots:
         IRCUser user2("bob", "bob", "host2");
         IRCUser user3("charlie", "charlie", "host3");
 
-        QList<IRCUser> users = { user1, user2, user3 };
+        QList<IRCUser> users = {user1, user2, user3};
 
         // Track modelReset signal
         bool modelResetSignal = false;
-        QObject::connect(&model, &IRCUserModel::modelReset,
-                         [&modelResetSignal]() {
-                             modelResetSignal = true;
-                         });
+        QObject::connect(&model, &IRCUserModel::modelReset, [&modelResetSignal]() { modelResetSignal = true; });
 
         model.setUsers(users);
 
