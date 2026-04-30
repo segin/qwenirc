@@ -79,13 +79,9 @@ void MainWindow::initializeUI() {
     m_channelTabs = new QTabWidget();
     m_channelTabs->tabBar()->setTabsClosable(true);
     connect(m_channelTabs, &QTabWidget::tabCloseRequested, this, [this](int index) {
-        QString tabName = m_channelTabs->tabText(index);
-        if (tabName == "Server")
-            return;
-        ChannelTab* tab = qobject_cast<ChannelTab*>(m_channelTabs->widget(index));
-        if (tab) {
-            tab->close();
-        }
+        auto* tab = qobject_cast<ChannelTab*>(m_channelTabs->widget(index));
+        if (!tab || tab->channelName() == "Server") return;
+        tab->close();
     });
     mainSplitter->addWidget(m_channelTabs);
 
@@ -184,15 +180,23 @@ void MainWindow::initializeUI() {
 
     // Tab change handling - update current channel and user list
     connect(m_channelTabs, &QTabWidget::currentChanged, this, [this](int index) {
-        QString tabName = m_channelTabs->tabText(index);
-        if (tabName == "Server") {
-            m_currentChannel = "";
+        auto* tab = qobject_cast<ChannelTab*>(m_channelTabs->widget(index));
+        QString name = tab ? tab->channelName() : QString();
+        if (name.isEmpty() || name == "Server") {
+            m_currentChannel.clear();
             m_userList->clear();
             m_userList->setVisible(false);
-        } else {
-            m_currentChannel = tabName;
-            m_userList->setVisible(true);
+            return;
         }
+        m_currentChannel = name;
+        m_userList->clear();
+        if (auto* ch = m_network->channel(name)) {
+            for (const IRCUser& u : ch->users()) {
+                QString prefix = u.userPrefix();
+                m_userList->addItem(prefix.isEmpty() ? u.nick() : prefix + u.nick());
+            }
+        }
+        m_userList->setVisible(true);
     });
 }
 
@@ -442,17 +446,13 @@ void MainWindow::addChannelTab(const QString& name) {
 }
 
 void MainWindow::removeChannelTab(const QString& name) {
-    int idx = -1;
     for (int i = 0; i < m_channelTabs->count(); ++i) {
-        if (m_channelTabs->tabText(i) == name) {
-            idx = i;
+        auto* tab = qobject_cast<ChannelTab*>(m_channelTabs->widget(i));
+        if (tab && tab->channelName() == name) {
+            m_channelTabs->removeTab(i);
             break;
         }
     }
-    if (idx >= 0) {
-        m_channelTabs->removeTab(idx);
-    }
-
     if (m_channelModels.contains(name)) {
         delete m_channelModels.take(name);
     }
@@ -460,9 +460,8 @@ void MainWindow::removeChannelTab(const QString& name) {
 
 ChannelTab* MainWindow::findChannelTab(const QString& name) {
     for (int i = 0; i < m_channelTabs->count(); ++i) {
-        if (m_channelTabs->tabText(i) == name) {
-            return qobject_cast<ChannelTab*>(m_channelTabs->widget(i));
-        }
+        auto* tab = qobject_cast<ChannelTab*>(m_channelTabs->widget(i));
+        if (tab && tab->channelName() == name) return tab;
     }
     return nullptr;
 }
@@ -488,9 +487,9 @@ void MainWindow::onNamesComplete(const QString& channel) {
 }
 
 void MainWindow::addQueryTab(const QString& name) {
-    // Check if query tab already exists
     for (int i = 0; i < m_channelTabs->count(); ++i) {
-        if (m_channelTabs->tabText(i) == name) {
+        auto* tab = qobject_cast<ChannelTab*>(m_channelTabs->widget(i));
+        if (tab && tab->channelName() == name) {
             return;
         }
     }
@@ -510,9 +509,8 @@ void MainWindow::addQueryTab(const QString& name) {
 
 ChannelTab* MainWindow::findQueryTab(const QString& name) {
     for (int i = 0; i < m_channelTabs->count(); ++i) {
-        if (m_channelTabs->tabText(i) == name) {
-            return qobject_cast<ChannelTab*>(m_channelTabs->widget(i));
-        }
+        auto* tab = qobject_cast<ChannelTab*>(m_channelTabs->widget(i));
+        if (tab && tab->channelName() == name) return tab;
     }
     return nullptr;
 }
