@@ -688,13 +688,18 @@ void NetworkManager::handleQuit(const QString& prefix, const QStringList& params
         msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate));
     }
 
+    QList<QString> channelsWithUser;
     for (auto it = m_channels.begin(); it != m_channels.end(); ++it) {
-        IRCChannel* ch = it.value();
-        if (ch->findUser(nick) != nullptr) {
-            emit channelMessage(it.key(), msg);
-            ch->removeUser(nick);
-            emit userLeft(it.key(), nick, reason);
+        if (it.value()->findUser(nick) != nullptr) {
+            channelsWithUser.append(it.key());
         }
+    }
+    for (const QString& chanName : channelsWithUser) {
+        IRCChannel* ch = m_channels.value(chanName);
+        if (!ch) continue;
+        emit channelMessage(chanName, msg);
+        ch->removeUser(nick);
+        emit userLeft(chanName, nick, reason);
     }
 }
 
