@@ -195,11 +195,7 @@ void NetworkManager::onConnected() {
     m_state = Connected;
     emit stateChanged(m_state);
     emit connected();
-
-    if (!m_hasSentCapLs) {
-        m_hasSentCapLs = true;
-        sendRaw("CAP LS 302\r\n");
-    }
+    sendRaw("CAP LS 302\r\n");
 
     // Don't send NICK/USER yet - wait for CAP END
     // Registration will happen in handleCapCommand when we receive CAP END

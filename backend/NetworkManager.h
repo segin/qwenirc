@@ -122,7 +122,6 @@ private:
     QString m_nick;
     QString m_pass;
     QString m_currentChannel;
-    bool m_hasSentCapLs = false;
 
     QMap<QString, IRCChannel*> m_channels;
     State m_state;
