@@ -1,4 +1,5 @@
 #include "NetworkManager.h"
+#include <QDebug>
 #include <QSslSocket>
 
 NetworkManager::NetworkManager(QObject* parent)
@@ -786,11 +787,11 @@ void NetworkManager::handleCapCommand(const QStringList& params) {
         for (const auto& cap : m_activeCaps) {
             activeCapsList.append(cap);
         }
-        emit serverChannelMessage("Capabilities acknowledged: " + activeCapsList.join(", "));
+        qDebug() << "Capabilities acknowledged:" << activeCapsList;
         sendRaw("CAP END\r\n");
         sendRegistration();
     } else if (action == "NAK") {
-        emit serverChannelMessage("Capabilities rejected");
+        qDebug() << "Capabilities rejected";
         sendRaw("CAP END\r\n");
         sendRegistration();
     }
