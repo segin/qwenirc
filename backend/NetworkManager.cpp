@@ -867,9 +867,12 @@ void NetworkManager::handleNumericReply(const QString& numeric, const QString& p
         emit channelMessage(channel, msg);
     } else if (num == 333) {
         QString channel = params.value(1, "");
-        QString setter = params.value(2, "");
-        QString timestamp = params.value(3, "");
-        QString msgText = QString("Topic set by %1").arg(setter.section('!', 0, 0));
+        QString setter  = params.value(2, "");
+        QString tsStr   = params.value(3, "");
+        QDateTime when = QDateTime::fromSecsSinceEpoch(tsStr.toLongLong());
+        QString msgText = QString("Topic set by %1 on %2")
+                              .arg(setter.section('!', 0, 0))
+                              .arg(when.toString(Qt::ISODate));
         IRCMessage msg(MessageType::Topic, msgText, "");
         msg.setChannel(channel);
         emit channelMessage(channel, msg);
