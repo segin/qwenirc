@@ -80,17 +80,11 @@ signals:
     void ctcpReply(const QString& nick, const QString& command, const QString& text);
     void queryTabNeeded(const QString& nick);
 
-private slots:
-    void onConnected();
-    void onDisconnected();
-    void onReadyRead();
-    void onError(QAbstractSocket::SocketError error);
-    void onSslErrors(const QList<QSslError>& errors);
-    void onPingTimeout();
-    void onCapReqTimeout();
+protected:
+    void parseLine(const QString& line);
+    virtual void sendRaw(const QString& data);
 
 private:
-    void parseLine(const QString& line);
     void parseMessage(const QString& line, const QString& serverTime = {});
     void handlePrivMsg(const QString& prefix, const QStringList& params, const QString& serverTime = {});
     void handleNotice(const QString& prefix, const QStringList& params, const QString& serverTime = {});
@@ -104,14 +98,24 @@ private:
     void handleCapCommand(const QStringList& params);
     void handleNumericReply(const QString& numeric, const QString& prefix, const QStringList& params,
                             const QString& serverTime = {});
-
-    virtual void sendRaw(const QString& data);
     void sendCommand(const QString& cmd, const QStringList& params);
     void sendCtcpVersionReply(const QString& target);
     bool isCtcpMessage(const QString& message);
     void parseCtcpMessage(const QString& message, QString& command, QString& text);
     void sendRegistration();
+    void logTraffic(const QString& data, bool outgoing);
+    void closeTrafficLog();
 
+private slots:
+    void onConnected();
+    void onDisconnected();
+    void onReadyRead();
+    void onError(QAbstractSocket::SocketError error);
+    void onSslErrors(const QList<QSslError>& errors);
+    void onPingTimeout();
+    void onCapReqTimeout();
+
+private:
     QAbstractSocket* m_socket;
     QString m_host;
     quint16 m_port;
@@ -139,10 +143,6 @@ private:
     QString m_trafficLogDir;
     QFile* m_trafficLog = nullptr;
     QTextStream* m_trafficLogStream = nullptr;
-    void logTraffic(const QString& data, bool outgoing);
-    void closeTrafficLog();
-
-    friend class TestIrcParser;
 };
 
 #endif // NETWORKMANAGER_H

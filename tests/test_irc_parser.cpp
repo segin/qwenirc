@@ -15,6 +15,7 @@ public:
     explicit TestNetworkManager(QObject* parent = nullptr) : NetworkManager(parent) {}
 
     void sendRaw(const QString& data) override { m_sentCommands.append(data); }
+    void parseLine(const QString& line) { NetworkManager::parseLine(line); }
 
     QStringList sentCommands() const { return m_sentCommands; }
     void clearCommands() { m_sentCommands.clear(); }
