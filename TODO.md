@@ -15,7 +15,7 @@ When a task is done and acceptance has been verified, mark its checkbox `[x]`.
 
 ## CRITICAL
 
-### [ ] B-1. Channel-mode display must not mutate the tab title
+### [x] B-1. Channel-mode display must not mutate the tab title
 
 **User story.**
 As an IRC user, I want my channel tabs to keep showing the channel name regardless of what mode information the server reports, so that I can identify and click into the right tab without the label shifting under me.
@@ -57,7 +57,7 @@ void ChannelTab::setMode(const QString& mode) {
 
 ---
 
-### [ ] B-2. Tab routing must use the channel-name property, not the display text
+### [x] B-2. Tab routing must use the channel-name property, not the display text
 
 **User story.**
 As an IRC user, I want messages from other people in a channel to appear in that channel's tab, so that I can read and reply to the conversation.
@@ -128,7 +128,7 @@ void MainWindow::removeChannelTab(const QString& name) {
 
 ## HIGH
 
-### [ ] B-3. Server-originated NOTICEs must land in the Server tab, not spawn a query tab
+### [x] B-3. Server-originated NOTICEs must land in the Server tab, not spawn a query tab
 
 **User story.**
 As an IRC user, I want pre-registration server messages (hostname lookup, ident lookup, services notices, network broadcasts) to appear in the Server tab, so that my tab bar isn't polluted with a tab named after the server hostname.
@@ -177,7 +177,7 @@ if (target.startsWith(chantype) && channel(target)) {
 
 ---
 
-### [ ] B-4. Active-tab change must repopulate the user list from the new channel
+### [x] B-4. Active-tab change must repopulate the user list from the new channel
 
 **User story.**
 As an IRC user, when I switch back to a channel tab I want the user-list sidebar to show that channel's users, so that I always see who is in the channel I'm reading.
@@ -240,7 +240,7 @@ connect(m_channelTabs, &QTabWidget::currentChanged, this, [this](int index) {
 
 ## CARRY-OVER (still open from the previous pass)
 
-### [ ] M-1 (finish). `handleQuit` must snapshot affected channels before iterating
+### [x] M-1 (finish). `handleQuit` must snapshot affected channels before iterating
 
 **User story.**
 As an IRC user, I want my client to remain stable when a user quits, so that a connected slot reacting to one of my channels can't crash the application.
@@ -259,7 +259,7 @@ As an IRC user, I want my client to remain stable when a user quits, so that a c
 
 ---
 
-### [ ] M-4 (finish). RPL 333 message must include the topic-set timestamp
+### [x] M-4 (finish). RPL 333 message must include the topic-set timestamp
 
 **User story.**
 As an IRC user, I want the channel-topic banner to show both who set the topic and when, so that I have full provenance for the topic I'm reading.
@@ -292,7 +292,7 @@ As an IRC user, I want the channel-topic banner to show both who set the topic a
 
 ---
 
-### [ ] L-4 (still open). Mute the CAP-acknowledged / CAP-rejected announcements
+### [x] L-4 (still open). Mute the CAP-acknowledged / CAP-rejected announcements
 
 **User story.**
 As an IRC user, I don't want to see implementation chatter about which IRCv3 capabilities the server acknowledged or rejected, so that the Server tab is reserved for things I actually need to read.
@@ -311,7 +311,7 @@ As an IRC user, I don't want to see implementation chatter about which IRCv3 cap
 
 ---
 
-### [ ] L-7 (still open). Move `sendRaw` to `protected:` and remove `friend class TestIrcParser`
+### [x] L-7 (still open). Move `sendRaw` to `protected:` and remove `friend class TestIrcParser`
 
 **User story.**
 As a maintainer of `qwenirc`, I want test scaffolding to live in the test code rather than in production headers, so that production code is not coupled to test internals and the `friend` blast radius is removed.
@@ -340,7 +340,7 @@ The test subclass already inherits publicly and only needs `protected` access, s
 
 ---
 
-### [ ] R-1 (regression). Reset or remove `m_hasSentCapLs`
+### [x] R-1 (regression). Reset or remove `m_hasSentCapLs`
 
 **User story.**
 As an IRC user, I want to be able to reconnect after a disconnect within the same session, so that I'm not forced to restart the application after a transient network blip.
