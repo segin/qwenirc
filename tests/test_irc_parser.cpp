@@ -16,6 +16,7 @@ public:
 
     void sendRaw(const QString& data) override { m_sentCommands.append(data); }
     void parseLine(const QString& line) { NetworkManager::parseLine(line); }
+    void sendCommand(const QString& cmd, const QStringList& params) { NetworkManager::sendCommand(cmd, params); }
 
     QStringList sentCommands() const { return m_sentCommands; }
     void clearCommands() { m_sentCommands.clear(); }
@@ -176,21 +177,40 @@ private slots:
             }
         }
 
-        // The CAP REQ should contain the accepted caps (sasl, server-time, echo-message)
+        // The CAP REQ should contain the accepted caps (server-time, echo-message)
         // Each cap should appear as a separate token
         QVERIFY(!capReqCmd.isEmpty());
 
-        // Count the number of individual caps in the request (should be 3+)
+        // Count the number of individual caps in the request (should be 2+)
         QStringList parts = capReqCmd.split(' ', Qt::SkipEmptyParts);
-        // Format: "CAP REQ cap1 cap2 cap3\r\n"
-        // The cap list should contain sasl, server-time, echo-message
-        QVERIFY(parts.size() >= 4); // CAP REQ at minimum + 1 cap
+        // Format: "CAP REQ cap1 cap2\r\n"
+        // The cap list should contain server-time, echo-message (sasl removed per H-5)
+        QVERIFY(parts.size() >= 3); // CAP REQ at minimum + 2 caps
 
-        // Verify individual cap names are present
+        // Verify individual cap names are present (sasl excluded per H-5)
         QString combined = capReqCmd.toLower();
-        QVERIFY(combined.contains("sasl"));
         QVERIFY(combined.contains("server-time"));
         QVERIFY(combined.contains("echo-message"));
+    }
+
+    // PART command formatting test
+    void testPartCommand() {
+        TestNetworkManager mgr;
+        mgr.clearCommands();
+        mgr.sendCommand("PART", QStringList() << "#qwenirc");
+
+        // Verify PART is sent without colon prefix: "PART #qwenirc\r\n"
+        QStringList cmds = mgr.sentCommands();
+        QVERIFY(!cmds.isEmpty());
+        QCOMPARE(cmds.size(), 1);
+        QCOMPARE(cmds[0], QString("PART #qwenirc\r\n"));
+
+        // QUIT with multi-word reason should use colon prefix
+        mgr.clearCommands();
+        mgr.sendCommand("QUIT", QStringList() << "Leaving now");
+        cmds = mgr.sentCommands();
+        QVERIFY(!cmds.isEmpty());
+        QCOMPARE(cmds[0], QString("QUIT :Leaving now\r\n"));
     }
 
     // CAP LS with multi-line
@@ -217,7 +237,6 @@ private slots:
         QVERIFY(!capReqCmd.isEmpty());
 
         QString combined = capReqCmd.toLower();
-        QVERIFY(combined.contains("sasl"));
         QVERIFY(combined.contains("server-time"));
         QVERIFY(combined.contains("echo-message"));
     }

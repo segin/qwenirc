@@ -46,9 +46,16 @@ public:
     const QMap<QString, IRCChannel*>& channels() const;
     IRCChannel* channel(const QString& name);
 
+    QString ircChannelKey(const QString& name) const {
+        return name.toLower();
+    }
+
     void setCurrentChannel(const QString& name);
     void registerChannel(const QString& name);
     void removeChannel(const QString& name);
+
+    QSet<QChar> prefixSymbols() const;
+    const QMap<QString, QString>& isupport() const { return m_isupport; }
 
 signals:
     void stateChanged(NetworkManager::State state);
@@ -59,7 +66,6 @@ signals:
     void serverChannelMessage(const QString& message);
 
     void channelRegistered(const QString& name);
-    void channelJoined(const QString& name);
     void channelUnregistered(const QString& name);
     void channelMessage(const QString& channel, const IRCMessage& msg);
     void channelTopic(const QString& channel, const QString& topic);
@@ -83,6 +89,7 @@ signals:
 protected:
     void parseLine(const QString& line);
     virtual void sendRaw(const QString& data);
+    void sendCommand(const QString& cmd, const QStringList& params);
 
 private:
     void parseMessage(const QString& line, const QString& serverTime = {});
@@ -98,7 +105,6 @@ private:
     void handleCapCommand(const QStringList& params);
     void handleNumericReply(const QString& numeric, const QString& prefix, const QStringList& params,
                             const QString& serverTime = {});
-    void sendCommand(const QString& cmd, const QStringList& params);
     void sendCtcpVersionReply(const QString& target);
     bool isCtcpMessage(const QString& message);
     void parseCtcpMessage(const QString& message, QString& command, QString& text);
@@ -133,11 +139,10 @@ private:
     QSet<QString> m_serverCaps;
     QByteArray m_lineBuffer;
     QTimer* m_capReqTimer;
+    QSet<QChar> m_prefixSymbols;
     int m_nickRetries = 0;
     QMap<QString, QString> m_isupport;
-
-    QChar extractModePrefix(const QString& nick);
-    QSet<QChar> m_prefixSymbols;
+    QSet<QString> m_namesCompleted;
 
     QString m_trafficLogDir;
     QFile* m_trafficLog = nullptr;

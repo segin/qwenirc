@@ -1,4 +1,5 @@
 #include "NetworkManager.h"
+#include <QRegularExpression>
 #include <QDebug>
 #include <QSslSocket>
 
@@ -16,7 +17,11 @@ NetworkManager::NetworkManager(QObject* parent)
 
     connect(m_capReqTimer, &QTimer::timeout, this, &NetworkManager::onCapReqTimeout);
 
-    m_capSupported = {"sasl", "server-time", "echo-message", "multi-prefix", "away-notify", "account-notify"};
+    m_capSupported = {"server-time", "echo-message", "multi-prefix", "away-notify", "account-notify"};
+}
+
+QSet<QChar> NetworkManager::prefixSymbols() const {
+    return m_prefixSymbols;
 }
 
 NetworkManager::~NetworkManager() {
@@ -28,7 +33,7 @@ NetworkManager::~NetworkManager() {
 }
 
 void NetworkManager::connectToServer(const QString& host, quint16 port, const QString& nick, const QString& pass,
-                                     const QString& channel, bool useTLS) {
+                                      const QString& channel, bool useTLS) {
     // Abort any existing hanging connection to prevent silently ignored attempts
     if (m_socket->state() == QAbstractSocket::ConnectingState || m_socket->state() == QAbstractSocket::ConnectedState) {
         m_socket->abort();
@@ -42,10 +47,12 @@ void NetworkManager::connectToServer(const QString& host, quint16 port, const QS
     m_state = Connecting;
     emit stateChanged(m_state);
 
+    // Always create a fresh socket for this connection
+    m_socket->blockSignals(true);
+    m_socket->disconnect();
+    delete m_socket;
+
     if (useTLS) {
-        m_socket->blockSignals(true);
-        m_socket->disconnect();
-        delete m_socket;
         QSslSocket* ssl = new QSslSocket(this);
         m_socket = ssl;
         connect(ssl, &QSslSocket::encrypted, this, &NetworkManager::onConnected);
@@ -57,7 +64,14 @@ void NetworkManager::connectToServer(const QString& host, quint16 port, const QS
         ssl->connectToHost(host, port);
         ssl->startClientEncryption();
     } else {
-        m_socket->connectToHost(host, port);
+        QTcpSocket* tcp = new QTcpSocket(this);
+        m_socket = tcp;
+        connect(tcp, &QAbstractSocket::connected, this, &NetworkManager::onConnected);
+        connect(tcp, &QAbstractSocket::disconnected, this, &NetworkManager::onDisconnected);
+        connect(tcp, &QAbstractSocket::readyRead, this, &NetworkManager::onReadyRead);
+        connect(tcp, QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::errorOccurred), this,
+                &NetworkManager::onError);
+        tcp->connectToHost(host, port);
     }
 }
 
@@ -70,7 +84,12 @@ void NetworkManager::sendMessage(const QString& channel, const QString& message)
 }
 
 void NetworkManager::joinChannel(const QString& channel) {
-    sendCommand("JOIN", QStringList() << channel);
+    QString chan = channel;
+    QString chanTypes = m_isupport.value("CHANTYPES", "#");
+    if (!chan.isEmpty() && !chanTypes.contains(chan[0])) {
+        chan = QString(chanTypes[0]) + chan;
+    }
+    sendCommand("JOIN", QStringList() << chan);
 }
 
 void NetworkManager::sendUserInput(const QString& context, const QString& text) {
@@ -84,7 +103,11 @@ void NetworkManager::sendUserInput(const QString& context, const QString& text) 
         if (cmd == "JOIN" && parts.size() >= 2) {
             joinChannel(parts[1]);
         } else if (cmd == "PART" && parts.size() >= 2) {
-            sendCommand("PART", QStringList() << parts[1]);
+            QStringList partParams = QStringList() << parts[1];
+            if (parts.size() >= 3) {
+                partParams << parts.mid(2).join(' ');
+            }
+            sendCommand("PART", partParams);
         } else if (cmd == "NICK" && parts.size() >= 2) {
             setNick(parts[1]);
         } else if (cmd == "QUIT") {
@@ -93,11 +116,14 @@ void NetworkManager::sendUserInput(const QString& context, const QString& text) 
             sendMessage(parts[1], parts.mid(2).join(' '));
             emit queryTabNeeded(parts[1]);
         } else if (cmd == "QUOTE" || cmd == "RAW") {
-            if (parts.size() >= 2)
-                sendRaw(parts.mid(1).join(' ') + "\r\n");
+            if (parts.size() >= 2) {
+                QString rawArg = parts.mid(1).join(' ');
+                rawArg.remove('\r').remove('\n');
+                sendRaw(rawArg + "\r\n");
+            }
         } else if (cmd == "TOPIC") {
-            QChar chanType = m_isupport["CHANTYPES"].isEmpty() ? QChar('#') : m_isupport["CHANTYPES"].front();
-            if (!context.isEmpty() && context != "Server" && context[0] == chanType) {
+               QString chanTypes = m_isupport.value("CHANTYPES", "#");
+            if (!context.isEmpty() && context != "Server" && !chanTypes.isEmpty() && chanTypes.contains(context[0])) {
                 if (parts.size() >= 2) {
                     setTopic(context, parts.mid(1).join(' '));
                 } else {
@@ -164,30 +190,39 @@ const QMap<QString, IRCChannel*>& NetworkManager::channels() const {
 }
 
 IRCChannel* NetworkManager::channel(const QString& name) {
-    auto it = m_channels.find(name);
-    if (it != m_channels.end()) {
-        return it.value();
+    QString key = ircChannelKey(name);
+    for (auto it = m_channels.begin(); it != m_channels.end(); ++it) {
+        if (it.key().toLower() == key) {
+            return it.value();
+        }
     }
     return nullptr;
 }
 
 void NetworkManager::setCurrentChannel(const QString& name) {
     m_currentChannel = name;
-    emit channelJoined(name);
 }
 
 void NetworkManager::registerChannel(const QString& name) {
-    if (!m_channels.contains(name)) {
-        IRCChannel* ch = new IRCChannel(name);
-        m_channels.insert(name, ch);
-        emit channelRegistered(name);
+    QString key = ircChannelKey(name);
+    for (auto it = m_channels.begin(); it != m_channels.end(); ++it) {
+        if (it.key().toLower() == key) {
+            return;
+        }
     }
+    IRCChannel* ch = new IRCChannel(name);
+    m_channels.insert(name, ch);
+    emit channelRegistered(name);
 }
 
 void NetworkManager::removeChannel(const QString& name) {
-    if (m_channels.contains(name)) {
-        delete m_channels.take(name);
-        emit channelUnregistered(name);
+    for (auto it = m_channels.begin(); it != m_channels.end(); ++it) {
+        if (it.key().toLower() == name.toLower()) {
+            delete it.value();
+            m_channels.erase(it);
+            emit channelUnregistered(name);
+            return;
+        }
     }
 }
 
@@ -195,6 +230,7 @@ void NetworkManager::onConnected() {
     m_state = Connected;
     emit stateChanged(m_state);
     emit connected();
+    m_pingTimer->start();
     sendRaw("CAP LS 302\r\n");
 
     // Don't send NICK/USER yet - wait for CAP END
@@ -206,6 +242,18 @@ void NetworkManager::onDisconnected() {
     emit stateChanged(m_state);
     emit disconnected();
     m_pingTimer->stop();
+    m_isupport.clear();
+    m_prefixSymbols = {'@', '%', '+'};
+    m_activeCaps.clear();
+    m_serverCaps.clear();
+    m_lineBuffer.clear();
+    m_nickRetries = 0;
+    m_namesCompleted.clear();
+    for (auto* ch : m_channels) {
+        delete ch;
+    }
+    m_channels.clear();
+    m_capReqTimer->stop();
 }
 
 void NetworkManager::onReadyRead() {
@@ -215,7 +263,8 @@ void NetworkManager::onReadyRead() {
 
     const int MAX_BUFFER_SIZE = 10 * 1024 * 1024;
     if (m_lineBuffer.size() > MAX_BUFFER_SIZE) {
-        m_lineBuffer = m_lineBuffer.right(m_lineBuffer.size() / 2);
+        int nl = m_lineBuffer.indexOf('\n');
+        m_lineBuffer = (nl >= 0) ? m_lineBuffer.mid(nl + 1) : QByteArray();
     }
 
     while (true) {
@@ -272,8 +321,10 @@ void NetworkManager::onPingTimeout() {
 }
 
 void NetworkManager::onCapReqTimeout() {
-    if (m_serverCaps.isEmpty())
+    if (m_serverCaps.isEmpty()) {
+        m_capReqTimer->stop();
         return;
+    }
 
     QStringList acceptedCaps;
     for (const auto& cap : m_capSupported) {
@@ -283,7 +334,7 @@ void NetworkManager::onCapReqTimeout() {
     }
 
     if (!acceptedCaps.isEmpty()) {
-        sendCommand("CAP", QStringList() << "REQ" << acceptedCaps.join(' '));
+        sendCommand("CAP", QStringList() << "REQ" << (":" + acceptedCaps.join(' ')));
     } else {
         sendRaw("CAP END\r\n");
         sendRegistration();
@@ -333,19 +384,31 @@ void NetworkManager::parseMessage(const QString& line, const QString& serverTime
         QString rest = line.mid(spaceIdx + 1);
 
         spaceIdx = rest.indexOf(' ');
-        if (spaceIdx > 0) {
-            cmd = rest.mid(0, spaceIdx);
-            rest = rest.mid(spaceIdx + 1);
-        } else {
-            cmd = rest;
+        if (spaceIdx <= 0) {
+            return;
+        }
+        cmd = rest.mid(0, spaceIdx);
+        rest = rest.mid(spaceIdx + 1);
+
+        rest = rest.trimmed();
+        if (rest.isEmpty()) {
+            return;
         }
 
         while (!rest.isEmpty()) {
+            // Skip leading spaces
             while (!rest.isEmpty() && rest.startsWith(' ')) {
                 rest = rest.mid(1);
             }
+            if (rest.isEmpty()) {
+                break;
+            }
             if (rest.startsWith(':')) {
                 QString trailing = rest.mid(1);
+                params.append(trailing);
+                break;
+            } else if (rest.startsWith(" :")) {
+                QString trailing = rest.mid(2);
                 params.append(trailing);
                 break;
             } else {
@@ -370,10 +433,12 @@ void NetworkManager::parseMessage(const QString& line, const QString& serverTime
                 QString trailing = params.takeAt(i);
                 if (trailing.startsWith(':'))
                     trailing = trailing.mid(1);
+                int saved_i = i;
                 while (i < params.size()) {
                     trailing += ' ' + params.takeAt(i);
                     ++i;
                 }
+                i = saved_i;
                 params.append(trailing);
                 break;
             }
@@ -445,7 +510,8 @@ void NetworkManager::handlePrivMsg(const QString& prefix, const QStringList& par
         } else if (ctcpCommand.toUpper() == "FINGER") {
             emit ctcpRequest(senderNick, "FINGER", ctcpText);
         } else if (ctcpCommand.toUpper() == "ACTION") {
-            IRCMessage actionMsg(MessageType::Message, "*" + ctcpText + "*", senderNick);
+            IRCMessage actionMsg(MessageType::System,
+                QString("* %1 %2").arg(senderNick).arg(ctcpText));
             actionMsg.setChannel(chanName);
             if (!serverTime.isEmpty()) {
                 actionMsg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate));
@@ -509,15 +575,19 @@ void NetworkManager::handleNotice(const QString& prefix, const QStringList& para
         msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate));
     }
 
-    QChar chantype = m_isupport["CHANTYPES"].isEmpty() ? QChar('#') : m_isupport["CHANTYPES"].front();
+       QString chanTypes = m_isupport.value("CHANTYPES", "#");
+    bool isChannelTarget = !chanTypes.isEmpty() && !target.isEmpty() && chanTypes.contains(target[0]) && channel(target);
     bool isServerSender = !prefix.contains('!') && !prefix.contains('@');
     bool isPreRegTarget = (target == "*" || target == "AUTH");
 
-    if (target.startsWith(chantype) && channel(target)) {
+    if (isChannelTarget) {
+        emit noticeReceived(sender, text);
         emit channelMessage(target, msg);
     } else if (isServerSender || isPreRegTarget) {
+        emit noticeReceived(sender, text);
         emit serverChannelMessage(QString("[%1] %2").arg(sender).arg(text));
     } else {
+        emit noticeReceived(sender, text);
         emit channelMessage(sender, msg);
         emit queryTabNeeded(sender);
     }
@@ -530,7 +600,7 @@ void NetworkManager::handleNick(const QString& prefix, const QStringList& params
     QString newNick = params[0];
     QString oldNick = prefix.section('!', 0, 0);
 
-    if (oldNick == m_nick) {
+    if (oldNick.toLower() == m_nick.toLower()) {
         m_nick = newNick;
         emit nickSet(m_nick);
     }
@@ -555,8 +625,13 @@ void NetworkManager::handleNick(const QString& prefix, const QStringList& params
         IRCUser* user = ch->findUser(oldNick);
         QString ident = user->ident();
         QString host = user->host();
+        QString prefix = user->userPrefix();
         ch->removeUser(oldNick);
         ch->addUser(IRCUser(newNick, ident, host));
+        IRCUser* newUser = ch->findUser(newNick);
+        if (newUser) {
+            newUser->setUserPrefix(prefix);
+        }
         emit channelMessage(key, msg);
     }
 }
@@ -568,7 +643,7 @@ void NetworkManager::handleJoin(const QString& prefix, const QStringList& params
     QString chanName = params[0];
     QString nick = prefix.section('!', 0, 0);
 
-    if (nick == m_nick) {
+    if (nick.toLower() == m_nick.toLower()) {
         registerChannel(chanName);
     }
 
@@ -619,6 +694,9 @@ void NetworkManager::handlePart(const QString& prefix, const QStringList& params
 
     emit channelMessage(chanName, msg);
     emit userLeft(chanName, nick, reason);
+    if (nick.toLower() == m_nick.toLower()) {
+        m_namesCompleted.remove(chanName);
+    }
 
     auto* ch = channel(chanName);
     if (ch) {
@@ -626,7 +704,7 @@ void NetworkManager::handlePart(const QString& prefix, const QStringList& params
         ch->addMessage(msg);
     }
 
-    if (nick == m_nick) {
+    if (nick.toLower() == m_nick.toLower()) {
         removeChannel(chanName);
     }
 }
@@ -645,11 +723,12 @@ void NetworkManager::handleMode(const QString& prefix, const QStringList& params
     auto* ch = channel(target);
     if (ch) {
         QString prefixSpec = m_isupport.value("PREFIX", "(ohv)@%+");
-        ch->applyMode(mode, modeParams, prefix.section('!', 0, 0), prefixSpec);
-    }
+        QString chanModes = m_isupport.value("CHANMODES", "");
+        ch->applyMode(mode, modeParams, prefix.section('!', 0, 0), prefixSpec, chanModes);
 
-    IRCMessage msg(MessageType::Mode, modeStr, prefix.section('!', 0, 0));
-    emit channelMessage(target, msg);
+        IRCMessage msg(MessageType::Mode, modeStr, prefix.section('!', 0, 0));
+        emit channelMessage(target, msg);
+    }
 }
 
 void NetworkManager::handleTopic(const QString& prefix, const QStringList& params, const QString& serverTime) {
@@ -721,12 +800,16 @@ void NetworkManager::handleKick(const QString& prefix, const QStringList& params
         msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate));
     }
 
-    emit channelMessage(chanName, msg);
+   emit channelMessage(chanName, msg);
     emit userLeft(chanName, kicked, reason);
 
-    auto* ch = channel(chanName);
+  auto* ch = channel(chanName);
     if (ch) {
         ch->removeUser(kicked);
+        ch->addMessage(msg);
+    }
+    if (kicked.toLower() == m_nick.toLower()) {
+        removeChannel(chanName);
     }
 }
 
@@ -764,14 +847,11 @@ void NetworkManager::handleCapCommand(const QStringList& params) {
             caps = params[2].split(' ', Qt::SkipEmptyParts);
         }
         for (const auto& cap : caps) {
-            QString capName = cap;
+          QString capName = cap;
             if (capName.startsWith('-')) {
                 capName = capName.mid(1);
                 m_activeCaps.remove(capName);
                 continue;
-            }
-            if (capName.endsWith(':')) {
-                capName = capName.left(capName.size() - 1);
             }
             int eqPos = capName.indexOf('=');
             if (eqPos >= 0) {
@@ -828,8 +908,8 @@ void NetworkManager::handleNumericReply(const QString& numeric, const QString& p
             joinChannel(m_currentChannel);
             m_currentChannel.clear();
         }
-    } else if (num == 436) {
-        emit serverChannelMessage("RPL 436 (Caps fail)");
+   } else if (num == 436) {
+        emit serverError("ERR_NICKCOLLISION: Nick collision detected");
     } else if (num == 422) {
         emit serverChannelMessage("RPL 422 (End of MOTD)");
         if (!m_currentChannel.isEmpty()) {
@@ -839,8 +919,11 @@ void NetworkManager::handleNumericReply(const QString& numeric, const QString& p
     } else if (num == 366) {
         QString channel = params.value(1, "");
         emit namesComplete(channel);
-        sendCommand("TOPIC", QStringList() << channel);
-        sendCommand("MODE", QStringList() << channel);
+        if (!m_namesCompleted.contains(channel)) {
+            m_namesCompleted.insert(channel);
+            sendCommand("TOPIC", QStringList() << channel);
+            sendCommand("MODE", QStringList() << channel);
+        }
     } else if (num == 324) {
         if (params.size() >= 3) {
             QString channel = params.value(1, "");
@@ -866,23 +949,21 @@ void NetworkManager::handleNumericReply(const QString& numeric, const QString& p
         QString channel = params.value(1, "");
         QString setter  = params.value(2, "");
         QString tsStr   = params.value(3, "");
-        QDateTime when = QDateTime::fromSecsSinceEpoch(tsStr.toLongLong());
+       QDateTime when = QDateTime::fromSecsSinceEpoch(tsStr.toLongLong());
         QString msgText = QString("Topic set by %1 on %2")
                               .arg(setter.section('!', 0, 0))
                               .arg(when.toString(Qt::ISODate));
-        IRCMessage msg(MessageType::Topic, msgText, "");
+        IRCMessage msg(MessageType::System, msgText, "");
         msg.setChannel(channel);
         emit channelMessage(channel, msg);
-    } else if (num == 329) {
-        QString channel = params.value(1, "");
-        QString timestamp = params.value(2, "");
+     } else if (num == 329) {
+        // Channel creation time
     } else if (num == 367) {
-        QString channel = params.value(1, "");
+        // Kick with reason
     } else if (num == 368) {
-        QString channel = params.value(1, "");
+        // End of ban list
     } else if (num == 401) {
-        QString missingNick = params.value(1, "");
-        emit serverError("No such nick: " + missingNick);
+        emit serverError("No such nick: " + params.value(1, ""));
     } else if (num == 433) {
         m_nickRetries++;
         if (m_nickRetries > 3) {
@@ -891,58 +972,105 @@ void NetworkManager::handleNumericReply(const QString& numeric, const QString& p
         } else {
             setNick(m_nick + "_");
         }
+    } else if (num == 311) {
+        QString identNick = params.value(1, "");
+        QString ident = params.value(2, "");
+        if (!ident.isEmpty())
+            emit whoisIdent(identNick, ident);
+    } else if (num == 312) {
+        QString nick = params.value(1, "");
+        QString server = params.value(2, "");
+        QString hostname = params.value(3, "");
+        if (hostname.startsWith(':'))
+            hostname = hostname.mid(1);
+        emit serverChannelMessage("RPL 312 (" + nick + " on " + server + " (" + hostname + "))");
+    } else if (num == 313) {
+        QString nick = params.value(1, "");
+        QString op = params.value(2, "");
+        if (op.startsWith(':'))
+            op = op.mid(1);
+        emit serverChannelMessage("RPL 313 (" + nick + " is an IRC operator: " + op + ")");
+    } else if (num == 317) {
+        QString nick = params.value(1, "");
+        long idle = params.value(2, "").toLongLong();
+        QString account = params.value(3, "");
+        QString idleStr;
+        if (idle >= 86400)
+            idleStr = QString("%L1 days").arg(idle / 86400);
+        else if (idle >= 3600)
+            idleStr = QString("%L1 hours").arg(idle / 3600);
+        else if (idle >= 60)
+            idleStr = QString("%L1 minutes").arg(idle / 60);
+        else
+            idleStr = QString("%L1 seconds").arg(idle);
+        emit serverChannelMessage("RPL 317 (" + nick + " is idle " + idleStr + ")");
+        if (!account.isEmpty() && account.startsWith(':')) {
+            account = account.mid(1);
+        }
+        if (!account.isEmpty()) {
+            emit whoisAccount(nick, account);
+        }
+    } else if (num == 318) {
+        QString nick = params.value(1, "");
+        emit whoisDone(nick);
+    } else if (num == 319) {
+        QString nick = params.value(1, "");
+        QString channels = params.value(2, "");
+        emit whoisChannels(nick, channels);
     } else if (num == 315) {
-        QString channel = params.value(1, "");
-    } else if (num == 353) {
-        QString channel = params.value(1, "");
-        QString users;
-        int paramIdx = 2;
-        if (channel == "=" || channel == "@" || channel == "*") {
-            channel = params.value(2, "");
-            paramIdx = 3;
-        }
-        users = params.value(paramIdx, "");
-        if (users.startsWith(':')) {
-            users = users.mid(1);
-        }
-        QStringList userParts = users.split(' ');
-        QStringList nonEmpty;
-        for (const QString& u : userParts) {
-            if (!u.isEmpty()) {
-                nonEmpty.append(u);
-            }
-        }
-        QList<IRCUser> userList;
-        for (const QString& u : nonEmpty) {
-            QString nick = u;
-            QString mode;
-            QChar modeChar = extractModePrefix(nick);
-            if (!nick.isEmpty() && !nick.isEmpty() && modeChar != QChar() && nick.startsWith(modeChar)) {
-                mode = QString(modeChar);
-                nick = nick.mid(1);
-            }
-            if (!nick.isEmpty()) {
-                emit userReceived(channel, nick);
-                IRCUser user(nick);
-                user.setUserPrefix(mode);
-                userList.append(user);
-            }
-        }
-        emit namesReceived(channel, userList);
-        emit serverChannelMessage("RPL 353 (Users list): " + channel + " " + users);
-    } else if (num == 331) {
-        QString channel = params.value(1, "");
+        // End of whois
+   } else if (num == 353) {
+          QString param1 = params.value(1, "");
+          QString chanName;
+          int usersParamIdx;
+          if (param1 == "=" || param1 == "@" || param1 == "*" || param1 == "+") {
+              chanName = params.value(2, "");
+              usersParamIdx = 3;
+          } else {
+              chanName = params.value(1, "");
+              usersParamIdx = 2;
+          }
+          QString users = params.value(usersParamIdx, "");
+          if (users.startsWith(':')) {
+              users = users.mid(1);
+          }
+          QStringList userParts = users.split(' ');
+          QStringList nonEmpty;
+          for (const QString& u : userParts) {
+              if (!u.isEmpty()) {
+                  nonEmpty.append(u);
+              }
+          }
+          QList<IRCUser> userList;
+          for (const QString& u : nonEmpty) {
+              QString nick = u;
+              QString mode;
+              while (!nick.isEmpty() && !m_prefixSymbols.isEmpty() && m_prefixSymbols.contains(nick[0])) {
+                  mode += nick[0];
+                  nick = nick.mid(1);
+              }
+              if (!nick.isEmpty()) {
+                  emit userReceived(chanName, nick);
+                  IRCUser user(nick);
+                  user.setUserPrefix(mode);
+                  userList.append(user);
+              }
+          }
+          emit namesReceived(chanName, userList);
+
+          auto* ch = channel(chanName);
+          if (ch) {
+              for (const IRCUser& u : userList) {
+                  ch->addUser(u);
+              }
+          }
+          emit serverChannelMessage("RPL 353 (Users list): " + chanName + " " + users);
+     } else if (num == 331) {
+        // Channel not empty
     } else if (num >= 400 && num <= 420) {
-        QString text2 = params.value(2, "");
-        if (text2.startsWith(':')) {
-            text2 = text2.mid(1);
-        }
+        // Client errors - silently consume for now
     } else if (num >= 421 && num <= 499) {
-        QString errText = params.value(2, "");
-        if (errText.startsWith(':')) {
-            errText = errText.mid(1);
-        }
-        emit serverError("RPL " + QString::number(num) + ": " + errText);
+        emit serverError("RPL " + QString::number(num) + ": " + params.value(2, ""));
     } else if (num == 5) {
         for (int i = 1; i < params.size(); ++i) {
             QString token = params[i];
@@ -976,22 +1104,6 @@ void NetworkManager::handleNumericReply(const QString& numeric, const QString& p
     }
 }
 
-QChar NetworkManager::extractModePrefix(const QString& nick) {
-    if (nick.isEmpty()) {
-        return {};
-    }
-
-    if (m_prefixSymbols.isEmpty()) {
-        return {};
-    }
-
-    if (m_prefixSymbols.contains(nick[0])) {
-        return nick[0];
-    }
-
-    return {};
-}
-
 void NetworkManager::sendRaw(const QString& data) {
     logTraffic(data, true);
     m_socket->write(data.toUtf8());
@@ -1023,14 +1135,15 @@ void NetworkManager::sendCtcpVersionReply(const QString& target) {
 
 void NetworkManager::sendCommand(const QString& cmd, const QStringList& params) {
     QString line = cmd;
-    int i = 0;
 
-    for (; i < params.size() - 1; ++i) {
-        line += " " + params[i];
-    }
-
-    if (i < params.size()) {
-        line += " :" + params[i];
+    for (int i = 0; i < params.size(); ++i) {
+        bool isTrailing = (i == params.size() - 1) &&
+                          (params[i].isEmpty() || params[i].contains(' ') || params[i].startsWith(':'));
+        if (isTrailing) {
+            line += " :" + params[i];
+        } else {
+            line += " " + params[i];
+        }
     }
 
     line += "\r\n";
@@ -1045,7 +1158,6 @@ void NetworkManager::sendRegistration() {
     m_realname = m_nick;
     sendCommand("NICK", QStringList() << m_nick);
     sendCommand("USER", QStringList() << m_username << "8" << "*" << m_realname);
-    m_pingTimer->start();
 }
 
 void NetworkManager::setTrafficLogDir(const QString& dir) {
@@ -1076,11 +1188,16 @@ void NetworkManager::closeTrafficLog() {
 }
 
 void NetworkManager::clearTrafficLog() {
-    closeTrafficLog();
-    m_trafficLog = new QFile(m_trafficLogDir + "/traffic.log");
-    if (m_trafficLog->open(QFile::WriteOnly | QFile::Text)) {
-        m_trafficLogStream = new QTextStream(m_trafficLog);
-        *m_trafficLogStream << QString("=== Traffic log started %1 ===\n").arg(QDateTime::currentDateTime().toString());
+    if (m_trafficLogDir.isEmpty()) return;
+    if (m_trafficLogStream) {
+        m_trafficLogStream->flush();
+        delete m_trafficLogStream;
+        m_trafficLogStream = nullptr;
+    }
+    if (m_trafficLog) {
+        m_trafficLog->close();
+        delete m_trafficLog;
+        m_trafficLog = nullptr;
     }
 }
 

@@ -8,20 +8,30 @@ IRCMessageModel::IRCMessageModel(QObject* parent) : QAbstractListModel(parent) {
 }
 
 void IRCMessageModel::addMessage(const IRCMessage& msg) {
-    if (m_messages.size() >= IRCMessageModel::MAX_MESSAGES) {
-        beginRemoveRows(QModelIndex(), 0, 0);
-        m_messages.removeFirst();
-        endRemoveRows();
+    if (m_messages.isEmpty()) {
+        m_messages.resize(MAX_MESSAGES);
+        m_head = 0;
+        m_messageCount = 0;
     }
 
-    beginInsertRows(QModelIndex(), m_messages.size(), m_messages.size());
-    m_messages.append(msg);
-    endInsertRows();
+    if (m_messageCount >= MAX_MESSAGES) {
+        int physIdx = m_head;
+        m_messages[physIdx] = msg;
+        m_head = (m_head + 1) % MAX_MESSAGES;
+        emit dataChanged(index(0, 0), index(MAX_MESSAGES - 1, 0), {Qt::DisplayRole});
+    } else {
+        beginInsertRows(QModelIndex(), m_messageCount, m_messageCount);
+        m_messages[m_messageCount] = msg;
+        m_messageCount++;
+        endInsertRows();
+    }
 }
 
 void IRCMessageModel::clear() {
     beginResetModel();
     m_messages.clear();
+    m_head = 0;
+    m_messageCount = 0;
     endResetModel();
 }
 
@@ -32,15 +42,17 @@ void IRCMessageModel::insertSystemMessage(const QString& text) {
 
 int IRCMessageModel::rowCount(const QModelIndex& parent) const {
     Q_UNUSED(parent);
-    return m_messages.size();
+    return m_messageCount;
 }
 
 QVariant IRCMessageModel::data(const QModelIndex& index, int role) const {
-    if (!index.isValid() || index.row() < 0 || index.row() >= m_messages.size()) {
+    if (!index.isValid() || index.row() < 0 || index.row() >= m_messageCount) {
         return {};
     }
 
-    const auto& msg = m_messages[index.row()];
+    int row = index.row();
+    int physIdx = (m_head + row) % MAX_MESSAGES;
+    const auto& msg = m_messages[physIdx];
 
     switch (role) {
     case Qt::DisplayRole:
@@ -132,70 +144,6 @@ QVariant IRCUserModel::data(const QModelIndex& index, int role) const {
     }
     case NickRole:
         return user.nick();
-    default:
-        return {};
-    }
-}
-
-// ---- IRCChannelModel ----
-
-IRCChannelModel::IRCChannelModel(QObject* parent) : QAbstractListModel(parent) {
-}
-
-void IRCChannelModel::addChannel(const QString& name) {
-    for (const auto& ch : m_channels) {
-        if (ch == name) {
-            return;
-        }
-    }
-
-    beginInsertRows(QModelIndex(), m_channels.size(), m_channels.size());
-    m_channels.append(name);
-    endInsertRows();
-}
-
-void IRCChannelModel::removeChannel(const QString& name) {
-    int idx = m_channels.indexOf(name);
-    if (idx >= 0) {
-        beginRemoveRows(QModelIndex(), idx, idx);
-        m_channels.removeOne(name);
-        endRemoveRows();
-    }
-}
-
-void IRCChannelModel::clear() {
-    beginResetModel();
-    m_channels.clear();
-    m_currentChannel.clear();
-    endResetModel();
-}
-
-void IRCChannelModel::setCurrentChannel(const QString& name) {
-    m_currentChannel = name;
-    if (m_channels.isEmpty())
-        return;
-    emit dataChanged(index(0, 0), index(m_channels.size() - 1, 0));
-}
-
-int IRCChannelModel::rowCount(const QModelIndex& parent) const {
-    Q_UNUSED(parent);
-    return m_channels.size();
-}
-
-QVariant IRCChannelModel::data(const QModelIndex& index, int role) const {
-    if (!index.isValid() || index.row() < 0 || index.row() >= m_channels.size()) {
-        return {};
-    }
-
-    const auto& channel = m_channels[index.row()];
-
-    switch (role) {
-    case Qt::DisplayRole:
-        return channel;
-    case NameRole:
-        return channel;
-    case ActiveRole:
-        return channel == m_currentChannel;
     default:
         return {};
     }

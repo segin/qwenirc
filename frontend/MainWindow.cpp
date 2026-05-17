@@ -19,10 +19,15 @@ public:
         QRect rect = option.rect;
 
         painter->save();
-        painter->setBrush(option.palette.brush(QPalette::Base));
-        painter->setPen(option.palette.color(QPalette::WindowText));
+        if (option.state & QStyle::State_Selected) {
+            painter->setBrush(option.palette.brush(QPalette::Highlight));
+            painter->setPen(option.palette.color(QPalette::HighlightedText));
+        } else {
+            painter->setBrush(option.palette.brush(QPalette::Base));
+            painter->setPen(option.palette.color(QPalette::WindowText));
+        }
 
-        painter->drawRect(rect);
+        painter->fillRect(rect, painter->brush());
 
         painter->drawText(rect.adjusted(5, 0, 0, 0), Qt::TextFlag::TextWordWrap, text);
 
@@ -78,10 +83,22 @@ void MainWindow::initializeUI() {
     // Channel tabs (QTabWidget)
     m_channelTabs = new QTabWidget();
     m_channelTabs->tabBar()->setTabsClosable(true);
+    m_channelTabs->setMovable(true);
     connect(m_channelTabs, &QTabWidget::tabCloseRequested, this, [this](int index) {
         auto* tab = qobject_cast<ChannelTab*>(m_channelTabs->widget(index));
-        if (!tab || tab->channelName() == "Server") return;
-        tab->close();
+        if (!tab) return;
+        QString tabName = tab->channelName();
+        if (tabName == "Server") return;
+        QString chanTypes = m_network->isupport().value("CHANTYPES", "#");
+        bool isChannel = std::any_of(chanTypes.cbegin(), chanTypes.cend(),
+            [&](QChar ct) { return tabName.startsWith(ct); });
+        if (isChannel) {
+            m_network->sendUserInput(tabName, "/PART " + tabName);
+        }
+        if (m_queryModels.contains(tabName)) {
+            delete m_queryModels.take(tabName);
+        }
+        removeChannelTab(tabName);
     });
     mainSplitter->addWidget(m_channelTabs);
 
@@ -95,11 +112,13 @@ void MainWindow::initializeUI() {
     mainSplitter->setSizes({150, 800, 200});
 
     // Server tab (for connection messages)
-    m_serverTab = new ChannelTab("Server", m_network);
+    m_serverTab = new ChannelTab("Server");
     m_serverTab->setTopicVisible(false);
     IRCMessageModel* serverMsgModel = new IRCMessageModel(this);
     m_serverTab->setChatModel(serverMsgModel);
     m_channelTabs->addTab(m_serverTab, "Server");
+    m_channelTabs->tabBar()->setTabButton(0, QTabBar::RightSide, nullptr);
+    m_channelTabs->tabBar()->setTabButton(0, QTabBar::LeftSide, nullptr);
     connect(m_serverTab, &ChannelTab::messageSent, this,
             [this](const QString& message) { m_network->sendUserInput("Server", message); });
 
@@ -124,7 +143,6 @@ void MainWindow::initializeUI() {
             break;
         }
         case NetworkManager::Connected:
-            setStatus("Connected");
             m_disconnectAction->setEnabled(true);
             break;
         case NetworkManager::Error:
@@ -155,6 +173,16 @@ void MainWindow::initializeUI() {
     connect(m_network, &NetworkManager::namesReceived, this, &MainWindow::onNamesReceived);
     connect(m_network, &NetworkManager::namesComplete, this, &MainWindow::onNamesComplete);
     connect(m_network, &NetworkManager::queryTabNeeded, this, &MainWindow::addQueryTab);
+
+    // CTCP signal handlers
+    connect(m_network, &NetworkManager::ctcpRequest, this, [this](const QString& nick, const QString& cmd, const QString&) {
+        IRCMessage msg(MessageType::System, QString("[CTCP %1 from %2]").arg(cmd).arg(nick), "Server");
+        m_serverTab->addMessage(msg);
+    });
+    connect(m_network, &NetworkManager::ctcpReply, this, [this](const QString& nick, const QString& cmd, const QString&) {
+        IRCMessage msg(MessageType::System, QString("[CTCP %1 reply to %2]").arg(cmd).arg(nick), "Server");
+        m_serverTab->addMessage(msg);
+    });
 
     // Channel list double-click to join channel
     connect(m_channelList, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem* item) {
@@ -348,9 +376,9 @@ void MainWindow::onServerChannelMessage(const QString& message) {
 }
 
 void MainWindow::onChannelMessage(const QString& channel, const IRCMessage& msg) {
-    auto* tab = findChannelTab(channel);
+    auto* tab = findChannelTab(channel.toLower());
     if (!tab) {
-        tab = findQueryTab(channel);
+        tab = findQueryTab(channel.toLower());
     }
     if (tab) {
         tab->addMessage(msg);
@@ -372,18 +400,23 @@ void MainWindow::onChannelMode(const QString& channel, const QString& mode) {
 }
 
 void MainWindow::onUserJoined(const QString& channel, const IRCUser& user) {
-    if (channel == m_currentChannel) {
-        m_userList->addItem(user.nick());
+    QString norm = channel.toLower();
+    if (m_currentChannel.toLower() == norm) {
+        QString entry = user.userPrefix().isEmpty() ? user.nick() : user.userPrefix() + user.nick();
+        m_userList->addItem(entry);
     }
 }
 
 void MainWindow::onUserLeft(const QString& channel, const QString& nick, const QString& reason) {
     Q_UNUSED(reason);
-    if (channel == m_currentChannel) {
-        QRegularExpression re("[~&@%+]");
+    QString norm = channel.toLower();
+    if (m_currentChannel.toLower() == norm) {
+        auto symbols = m_network->prefixSymbols();
         for (int i = 0; i < m_userList->count(); ++i) {
             QString text = m_userList->item(i)->text();
-            text.replace(re, "");
+            while (!text.isEmpty() && !symbols.isEmpty() && symbols.contains(text[0])) {
+                text = text.mid(1);
+            }
             if (text == nick) {
                 m_userList->takeItem(i);
                 break;
@@ -407,15 +440,16 @@ void MainWindow::onUserChangedNick(const QString& oldNick, const QString& newNic
     }
 
     // Update the user list for current channel
-    if (!m_currentChannel.isEmpty()) {
-        QRegularExpression re("[~&@%+]");
+    if (!m_currentChannel.isEmpty() && m_network->channel(m_currentChannel)) {
+        auto symbols = m_network->prefixSymbols();
         IRCChannel* ch = m_network->channel(m_currentChannel);
         IRCUser* user = ch ? ch->findUser(newNick) : nullptr;
         for (int i = 0; i < m_userList->count(); ++i) {
             QString text = m_userList->item(i)->text();
-            QString bareNick = text;
-            bareNick.replace(re, "");
-            if (bareNick == oldNick) {
+            while (!text.isEmpty() && !symbols.isEmpty() && symbols.contains(text[0])) {
+                text = text.mid(1);
+            }
+            if (text.toLower() == oldNick.toLower()) {
                 if (user) {
                     m_userList->item(i)->setText(user->userPrefix() + newNick);
                 } else {
@@ -436,39 +470,54 @@ void MainWindow::addChannelTab(const QString& name) {
     m_channelModels[name] = msgModel;
 
     // Add tab
-    ChannelTab* tab = new ChannelTab(name, m_network);
+    ChannelTab* tab = new ChannelTab(name);
     tab->setChatModel(msgModel);
     connect(tab, &ChannelTab::messageSent, this,
             [this, name](const QString& message) { m_network->sendUserInput(name, message); });
 
     m_channelTabs->addTab(tab, name);
+    m_channelTabs->setCurrentWidget(tab);
     m_channelList->addItem(name);
 }
 
 void MainWindow::removeChannelTab(const QString& name) {
+    QString norm = name.toLower();
     for (int i = 0; i < m_channelTabs->count(); ++i) {
         auto* tab = qobject_cast<ChannelTab*>(m_channelTabs->widget(i));
-        if (tab && tab->channelName() == name) {
+        if (tab && tab->channelName().toLower() == norm) {
             m_channelTabs->removeTab(i);
+            tab->deleteLater();
             break;
         }
     }
-    if (m_channelModels.contains(name)) {
-        delete m_channelModels.take(name);
+    QString key = name.toLower();
+    for (auto it = m_channelModels.begin(); it != m_channelModels.end(); ++it) {
+        if (it.key().toLower() == key) {
+            delete it.value();
+            m_channelModels.erase(it);
+            break;
+        }
+    }
+    for (int i = 0; i < m_channelList->count(); ++i) {
+        if (m_channelList->item(i)->text().toLower() == norm) {
+            delete m_channelList->takeItem(i);
+            break;
+        }
     }
 }
 
 ChannelTab* MainWindow::findChannelTab(const QString& name) {
+    QString norm = name.toLower();
     for (int i = 0; i < m_channelTabs->count(); ++i) {
         auto* tab = qobject_cast<ChannelTab*>(m_channelTabs->widget(i));
-        if (tab && tab->channelName() == name) return tab;
+        if (tab && tab->channelName().toLower() == norm) return tab;
     }
     return nullptr;
 }
 
 void MainWindow::onNamesReceived(const QString& channel, const QList<IRCUser>& users) {
-    Q_UNUSED(channel);
-    if (channel == m_currentChannel) {
+    QString norm = channel.toLower();
+    if (m_currentChannel.toLower() == norm) {
         m_userList->clear();
         for (const auto& user : users) {
             QString nick = user.nick();
@@ -487,9 +536,9 @@ void MainWindow::onNamesComplete(const QString& channel) {
 }
 
 void MainWindow::addQueryTab(const QString& name) {
-    for (int i = 0; i < m_channelTabs->count(); ++i) {
+     for (int i = 0; i < m_channelTabs->count(); ++i) {
         auto* tab = qobject_cast<ChannelTab*>(m_channelTabs->widget(i));
-        if (tab && tab->channelName() == name) {
+        if (tab && tab->channelName().toLower() == name.toLower()) {
             return;
         }
     }
@@ -497,20 +546,16 @@ void MainWindow::addQueryTab(const QString& name) {
     IRCMessageModel* msgModel = new IRCMessageModel(this);
     m_queryModels[name] = msgModel;
 
-    ChannelTab* tab = new ChannelTab(name, m_network);
+    ChannelTab* tab = new ChannelTab(name);
     tab->setChatModel(msgModel);
     tab->setTopicVisible(false);
     connect(tab, &ChannelTab::messageSent, this,
             [this, name](const QString& message) { m_network->sendUserInput(name, message); });
 
-    m_channelTabs->insertTab(0, tab, name);
+  m_channelTabs->insertTab(1, tab, name);
     m_channelTabs->setCurrentWidget(tab);
 }
 
 ChannelTab* MainWindow::findQueryTab(const QString& name) {
-    for (int i = 0; i < m_channelTabs->count(); ++i) {
-        auto* tab = qobject_cast<ChannelTab*>(m_channelTabs->widget(i));
-        if (tab && tab->channelName() == name) return tab;
-    }
-    return nullptr;
+    return findChannelTab(name);
 }

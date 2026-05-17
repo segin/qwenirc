@@ -29,8 +29,10 @@ public:
 
     static const int MAX_MESSAGES = 10000;
 
-protected:
+ protected:
     QList<IRCMessage> m_messages;
+    int m_head = 0;
+    int m_messageCount = 0;
 };
 
 class IRCUserModel : public QAbstractListModel {
@@ -53,34 +55,8 @@ public:
 
     const QList<IRCUser>& users() const { return m_users; }
 
-protected:
+  protected:
     QList<IRCUser> m_users;
-};
-
-class IRCChannelModel : public QAbstractListModel {
-    Q_OBJECT
-
-public:
-    explicit IRCChannelModel(QObject* parent = nullptr);
-
-    void addChannel(const QString& name);
-    void removeChannel(const QString& name);
-    void clear();
-    void setCurrentChannel(const QString& name);
-
-    int rowCount(const QModelIndex& parent = {}) const override;
-    QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
-
-    enum IRCChannelRoles { NameRole = Qt::UserRole, ActiveRole };
-
-    Q_ENUM(IRCChannelRoles)
-
-    QStringList& channels() { return m_channels; }
-    const QString& currentChannel() const { return m_currentChannel; }
-
-protected:
-    QStringList m_channels;
-    QString m_currentChannel;
 };
 
 #endif // IRCMODELS_H

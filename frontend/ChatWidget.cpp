@@ -1,8 +1,10 @@
 #include "ChatWidget.h"
 #include "backend/IRCMessageModel.h"
 #include <QApplication>
+#include <QScrollBar>
 #include <QClipboard>
 #include <QDateTime>
+#include <QTimer>
 #include <QFrame>
 #include <QKeyEvent>
 #include <QLabel>
@@ -29,10 +31,10 @@ public:
         painter->save();
         painter->setFont(option.font);
 
-        painter->translate(0, rect.top());
+        painter->translate(rect.left(), rect.top());
 
-        QRect clipRect(QPoint(0, 0), option.rect.size());
-        doc.drawContents(painter, clipRect);
+        painter->setClipRect(QRectF(0, 0, rect.width(), rect.height()));
+        doc.drawContents(painter, QRectF(0, 0, rect.width(), rect.height()));
 
         painter->restore();
     }
@@ -88,16 +90,16 @@ void ChatWidget::setTopicVisible(bool visible) {
 }
 
 void ChatWidget::addMessage(const IRCMessage& msg) {
-    if (m_chatModel && m_chatModel->inherits("IRCMessageModel")) {
-        IRCMessageModel* model = static_cast<IRCMessageModel*>(m_chatModel);
+    auto* model = qobject_cast<IRCMessageModel*>(m_chatModel);
+    if (model) {
         model->addMessage(msg);
     }
     scrollToBottom();
 }
 
 void ChatWidget::clearMessages() {
-    if (m_chatModel && m_chatModel->inherits("IRCMessageModel")) {
-        IRCMessageModel* model = static_cast<IRCMessageModel*>(m_chatModel);
+    auto* model = qobject_cast<IRCMessageModel*>(m_chatModel);
+    if (model) {
         model->clear();
     }
 }
@@ -116,12 +118,13 @@ void ChatWidget::scrollToBottom() {
         return;
 
     QScrollBar* scroll = m_chatList->verticalScrollBar();
-    if (scroll) {
-        // Only scroll to bottom if user was already at bottom
-        if (scroll->value() >= scroll->maximum() - 4) {
+    bool wasAtBottom = scroll && (scroll->value() >= scroll->maximum() - 4);
+
+    QTimer::singleShot(0, this, [scroll, wasAtBottom]() {
+        if (scroll && wasAtBottom) {
             scroll->setValue(scroll->maximum());
         }
-    }
+    });
 }
 
 void ChatWidget::copySelectedText() {

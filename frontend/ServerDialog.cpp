@@ -72,6 +72,10 @@ ServerDialog::ServerDialog(QWidget* parent) : QDialog(parent) {
 }
 
 void ServerDialog::applyConnection() {
+    if (m_nickEdit->text().trimmed().isEmpty()) {
+        QMessageBox::warning(this, "Invalid Nickname", "Nickname cannot be empty.");
+        return;
+    }
     QSettings settings("QwenIRC", "Connection");
     settings.setValue("host", m_hostEdit->text());
     settings.setValue("port", m_portEdit->text());

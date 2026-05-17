@@ -3,9 +3,8 @@
 #include <QLabel>
 #include <QTabWidget>
 
-ChannelTab::ChannelTab(const QString& name, NetworkManager* nm, QWidget* parent)
+ChannelTab::ChannelTab(const QString& name, QWidget* parent)
     : QWidget(parent), m_channelName(name), m_chatWidget(nullptr), m_inputEdit(nullptr) {
-    Q_UNUSED(nm);
     initializeUI();
 }
 
@@ -57,16 +56,16 @@ void ChannelTab::setChatModel(QAbstractItemModel* model) {
     m_chatWidget->setChatModel(model);
 }
 
-void ChannelTab::setMode(const QString& mode) {
-    QTabWidget* tw = parentWidget() ? qobject_cast<QTabWidget*>(parentWidget()->parentWidget()) : nullptr;
+ void ChannelTab::setMode(const QString& mode) {
+    QTabWidget* tw = qobject_cast<QTabWidget*>(this->parentWidget()->parentWidget());
     if (!tw) return;
     int idx = tw->indexOf(this);
     if (idx < 0) return;
     tw->setTabToolTip(idx, mode.isEmpty() ? channelName() : channelName() + "  [" + mode + "]");
 }
 
-void ChannelTab::close() {
-    QTabWidget* tw = parentWidget() ? qobject_cast<QTabWidget*>(parentWidget()->parentWidget()) : nullptr;
+void ChannelTab::closeTab() {
+    QTabWidget* tw = qobject_cast<QTabWidget*>(this->parentWidget()->parentWidget());
     if (tw) {
         int idx = tw->indexOf(this);
         if (idx >= 0) {

@@ -27,9 +27,9 @@ public:
     void addUser(const IRCUser& user);
     void removeUser(const QString& nick);
     void addMessage(const IRCMessage& msg);
-    void clear();
+   void clear();
     void applyMode(const QString& modeStr, const QStringList& modeParams, const QString& setter,
-                   const QString& prefixSpec = "");
+                    const QString& prefixSpec = "", const QString& chanModes = "");
 
 private:
     QString m_name;
@@ -38,6 +38,9 @@ private:
     QList<IRCUser> m_users;
     QList<IRCMessage> m_messages;
     QSet<QString> m_userSet;
+    static const QSet<QString> s_modesWithParam;
+    static QSet<QChar> parseChanModes(const QString& chanModes);
+    static void classifyChanModes(const QString& chanModes, QSet<QChar>& typeA, QSet<QChar>& typeB, QSet<QChar>& typeC);
 };
 
 #endif // IRCCHANNEL_H

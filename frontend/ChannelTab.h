@@ -4,7 +4,6 @@
 #include "ChatWidget.h"
 #include "backend/IRCMessage.h"
 #include "backend/IRCUser.h"
-#include "backend/NetworkManager.h"
 #include <QAbstractItemModel>
 #include <QLineEdit>
 #include <QVBoxLayout>
@@ -14,7 +13,7 @@ class ChannelTab : public QWidget {
     Q_OBJECT
 
 public:
-    explicit ChannelTab(const QString& name, NetworkManager* nm, QWidget* parent = nullptr);
+    explicit ChannelTab(const QString& name, QWidget* parent = nullptr);
 
     void setTopic(const QString& topic);
     void setTopicVisible(bool visible);
@@ -26,7 +25,7 @@ public:
     const QString& channelName() const { return m_channelName; }
 
 public slots:
-    void close();
+    void closeTab();
 
 signals:
     void messageSent(const QString& message);
