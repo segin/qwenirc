@@ -49,7 +49,100 @@ QString IRCMessage::formattedText() const {
         break;
     }
 
-    return result;
+ return result;
+}
+
+static const char* s_mircColors[16] = {
+    "#FFFFFF", "#000000", "#00007F", "#009300",
+    "#FF0000", "#7F0000", "#9C009C", "#FC7F00",
+    "#FFFF00", "#00FC00", "#009393", "#00FFFF",
+    "#0000FC", "#FF00FF", "#7F7F7F", "#D2D2D2",
+};
+
+QString IRCMessage::renderIrcFormatting(const QString& rawText) {
+    struct FmtState {
+        bool bold = false, italic = false, underline = false;
+        bool strike = false, mono = false, reverse = false;
+        int fg = -1, bg = -1;
+
+        bool operator==(const FmtState& o) const {
+            return bold == o.bold && italic == o.italic && underline == o.underline
+                && strike == o.strike && mono == o.mono && reverse == o.reverse
+                && fg == o.fg && bg == o.bg;
+        }
+        bool isPlain() const {
+            return !bold && !italic && !underline && !strike && !mono && !reverse
+                && fg == -1 && bg == -1;
+        }
+    };
+
+    auto buildStyle = [](const FmtState& s) -> QString {
+        QString style;
+        if (s.bold)      style += "font-weight:bold;";
+        if (s.italic)    style += "font-style:italic;";
+        if (s.mono)      style += "font-family:monospace;";
+        QStringList deco;
+        if (s.underline) deco << "underline";
+        if (s.strike)    deco << "line-through";
+        if (!deco.isEmpty()) style += "text-decoration:" + deco.join(' ') + ";";
+        int fg = s.reverse ? s.bg  : s.fg;
+        int bg = s.reverse ? s.fg  : s.bg;
+        if (fg >= 0 && fg < 16) style += QString("color:%1;").arg(s_mircColors[fg]);
+        if (bg >= 0 && bg < 16) style += QString("background-color:%1;").arg(s_mircColors[bg]);
+        return style;
+    };
+
+    QString result;
+    FmtState cur, last;
+    QString run;
+
+    auto flush = [&]() {
+        if (run.isEmpty()) return;
+        if (cur.isPlain()) {
+            result += run;
+        } else {
+            result += "<span style=\"" + buildStyle(cur) + "\">" + run + "</span>";
+        }
+        run.clear();
+        last = cur;
+    };
+
+    for (int i = 0; i < rawText.size(); ++i) {
+        ushort u = rawText[i].unicode();
+        if (u == 2)  { flush(); cur.bold      ^= true; }
+        else if (u == 3) {
+            flush();
+            int fg = -1, bg = -1;
+            ++i;
+            if (i < rawText.size() && rawText[i].isDigit()) {
+                fg = rawText[i++].digitValue();
+                if (i < rawText.size() && rawText[i].isDigit())
+                    fg = fg * 10 + rawText[i++].digitValue();
+                if (i < rawText.size() && rawText[i] == ',') {
+                    ++i;
+                    if (i < rawText.size() && rawText[i].isDigit()) {
+                        bg = rawText[i++].digitValue();
+                        if (i < rawText.size() && rawText[i].isDigit())
+                            bg = bg * 10 + rawText[i++].digitValue();
+                    }
+                }
+            }
+            --i;
+            if (fg == -1 && bg == -1) { cur.fg = cur.bg = -1; }
+            else { if (fg != -1) cur.fg = fg; if (bg != -1) cur.bg = bg; }
+        }
+        else if (u == 0x0F) { flush(); cur = FmtState{}; }
+        else if (u == 0x11) { flush(); cur.mono      ^= true; }
+        else if (u == 0x16) { flush(); cur.reverse   ^= true; }
+        else if (u == 0x1D) { flush(); cur.italic    ^= true; }
+        else if (u == 0x1E) { flush(); cur.strike    ^= true; }
+        else if (u == 0x1F) { flush(); cur.underline ^= true; }
+        else {
+            run += QString(rawText[i]).toHtmlEscaped();
+        }
+    }
+    flush();
+return result;
 }
 
 QString IRCMessage::coloredText() const {
@@ -59,68 +152,59 @@ QString IRCMessage::coloredText() const {
     switch (m_type) {
     case MessageType::Message:
         formatted += timestampStr + QString("<span style=\"color: %1;\"><b>%2</b></span>: %3")
-                                         .arg("#888888")
-                                         .arg(IRCMessage::stripIrcFormatting(m_sender).toHtmlEscaped())
-                                         .arg(IRCMessage::stripIrcFormatting(m_text).toHtmlEscaped());
+                                          .arg("#888888")
+                                          .arg(renderIrcFormatting(m_sender))
+                                          .arg(renderIrcFormatting(m_text));
         break;
     case MessageType::NickChange:
         formatted +=
-            timestampStr + QString("<span style=\"color: #FF8888;\">%1</span>").arg(IRCMessage::stripIrcFormatting(formattedText()).toHtmlEscaped());
+            timestampStr + QString("<span style=\"color: #FF8888;\">%1</span>").arg(renderIrcFormatting(formattedText()));
         break;
     case MessageType::Join:
         formatted +=
-            timestampStr + QString("<span style=\"color: #88FF88;\">%1</span>").arg(IRCMessage::stripIrcFormatting(formattedText()).toHtmlEscaped());
+            timestampStr + QString("<span style=\"color: #88FF88;\">%1</span>").arg(renderIrcFormatting(formattedText()));
         break;
-    case MessageType::Part: {
-        QString pt = formattedText();
-        QString cleanPt = IRCMessage::stripIrcFormatting(pt);
-        formatted += timestampStr + QString("<span style=\"color: #FF8888;\">%1</span>").arg(cleanPt.toHtmlEscaped());
+    case MessageType::Part:
+        formatted +=
+            timestampStr + QString("<span style=\"color: #FF8888;\">%1</span>").arg(renderIrcFormatting(formattedText()));
         break;
-    }
-    case MessageType::Quit: {
-        QString qt = formattedText();
-        QString cleanQt = IRCMessage::stripIrcFormatting(qt);
-        formatted += timestampStr + QString("<span style=\"color: #FF8888;\">%1</span>").arg(cleanQt.toHtmlEscaped());
+    case MessageType::Quit:
+        formatted +=
+            timestampStr + QString("<span style=\"color: #FF8888;\">%1</span>").arg(renderIrcFormatting(formattedText()));
         break;
-    }
     case MessageType::Kick:
         formatted +=
-            timestampStr + QString("<span style=\"color: #FF8888;\">%1</span>").arg(IRCMessage::stripIrcFormatting(formattedText()).toHtmlEscaped());
+            timestampStr + QString("<span style=\"color: #FF8888;\">%1</span>").arg(renderIrcFormatting(formattedText()));
         break;
-    case MessageType::Mode: {
-        QString mt = formattedText();
-        QString cleanMt = IRCMessage::stripIrcFormatting(mt);
-        formatted += timestampStr + QString("<span style=\"color: #8888FF;\">%1</span>").arg(cleanMt.toHtmlEscaped());
+    case MessageType::Mode:
+        formatted +=
+            timestampStr + QString("<span style=\"color: #8888FF;\">%1</span>").arg(renderIrcFormatting(formattedText()));
         break;
-    }
-    case MessageType::Topic: {
-        QString tt = formattedText();
-        QString cleanTt = IRCMessage::stripIrcFormatting(tt);
-        formatted += timestampStr + QString("<span style=\"color: #8888FF;\">%1</span>").arg(cleanTt.toHtmlEscaped());
+    case MessageType::Topic:
+        formatted +=
+            timestampStr + QString("<span style=\"color: #8888FF;\">%1</span>").arg(renderIrcFormatting(formattedText()));
         break;
-    }
     case MessageType::TopicSet:
         formatted +=
-            timestampStr + QString("<span style=\"color: #8888FF;\">%1</span>").arg(IRCMessage::stripIrcFormatting(formattedText()).toHtmlEscaped());
+            timestampStr + QString("<span style=\"color: #8888FF;\">%1</span>").arg(renderIrcFormatting(formattedText()));
         break;
     case MessageType::Error:
         formatted +=
-            timestampStr + QString("<span style=\"color: #FF0000;\">%1</span>").arg(IRCMessage::stripIrcFormatting(formattedText()).toHtmlEscaped());
+            timestampStr + QString("<span style=\"color: #FF0000;\">%1</span>").arg(renderIrcFormatting(formattedText()));
         break;
-    case MessageType::Notice: {
-        QString nt = formattedText();
-        QString cleanNt = IRCMessage::stripIrcFormatting(nt);
-        formatted += timestampStr + QString("<span style=\"color: #AAAAAA;\">%1</span>").arg(cleanNt.toHtmlEscaped());
+    case MessageType::Notice:
+        formatted +=
+            timestampStr + QString("<span style=\"color: #AAAAAA;\">%1</span>").arg(renderIrcFormatting(formattedText()));
         break;
-    }
     case MessageType::System:
         formatted +=
-            timestampStr + QString("<span style=\"color: #888888;\">%1</span>").arg(IRCMessage::stripIrcFormatting(formattedText()).toHtmlEscaped());
+            timestampStr + QString("<span style=\"color: #888888;\">%1</span>").arg(renderIrcFormatting(formattedText()));
         break;
     }
 
-   return formatted;
+    return formatted;
 }
+
 
 QString IRCMessage::stripIrcFormatting(const QString& text) {
     QString result;
@@ -145,6 +229,7 @@ QString IRCMessage::stripIrcFormatting(const QString& text) {
                 }
             }
             --i;
+            continue;
         } else if (u == 2 || u == 15 || u == 16 || u == 17 || u == 22 || u == 29 || u == 30 || u == 31) {
             continue;
         }

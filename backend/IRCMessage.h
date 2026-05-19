@@ -31,6 +31,7 @@ public:
     QString formattedText() const;
     QString coloredText() const;
     static QString stripIrcFormatting(const QString& text);
+    static QString renderIrcFormatting(const QString& text);
 
 private:
     MessageType m_type = MessageType::Message;
