@@ -85,6 +85,7 @@ signals:
     void ctcpRequest(const QString& nick, const QString& command, const QString& text);
     void ctcpReply(const QString& nick, const QString& command, const QString& text);
     void queryTabNeeded(const QString& nick);
+    void channelUsersChanged(const QString& channel);
 
 protected:
     void parseLine(const QString& line);

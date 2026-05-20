@@ -1,4 +1,4 @@
-# QwenIRC — Audit Checklist (rounds 3–10, 2026-05-18)
+# QwenIRC — Audit Checklist (rounds 3–13, 2026-05-19)
 
 Status key: `[ ]` open
 
@@ -77,7 +77,7 @@ Declare the helper in `frontend/MainWindow.h` as a private member function.
 - After unvoiced `eve` joins, list becomes: `@carol`, `+dave`, `alice`, `bob`, `eve`.
 - On a server with `PREFIX=(qaohv)~&@%+`, a channel owner `~quinn` sorts above `@carol`.
 
-- [ ] Done
+- [x] Done
 
 ---
 
@@ -148,7 +148,66 @@ connect(m_network, &NetworkManager::channelUsersChanged, this, [this](const QStr
 - `/mode #channel +o alice` immediately changes `alice` to `@alice` in the user list without requiring a tab switch.
 - `/mode #channel -v dave` immediately removes the `+` from `+dave`.
 
-- [ ] Done
+- [x] Done
+
+---
+
+## LOW
+
+### [L-17] IRCv3 server-time tag: 332 handler strips the `Z` suffix inconsistently with all other handlers
+
+**User story.**
+As an IRC user, I want all message timestamps to reflect my local time, not the server's clock, so that timestamps are consistent across all message types.
+
+**Requirements (EARS).**
+- **REQ-L17-1 (ubiquitous).** The system shall parse IRCv3 server-time tags uniformly across all message handlers, converting the resulting `QDateTime` to local time before storing it so that `coloredText()` displays correct local `HH:mm:ss` values.
+
+**Location.** `backend/NetworkManager.cpp`, `handleNumericReply`, 332 branch (~line 941–946); and all other `serverTime` call sites (~lines 497, 574, 611, 663, 691).
+
+**Bug.**
+The 332 (RPL_TOPIC) branch manually strips the trailing `Z` before calling `QDateTime::fromString(..., Qt::ISODate)`:
+
+```cpp
+QString cleanTime = serverTime;
+if (cleanTime.endsWith('Z'))
+    cleanTime.chop(1);
+msg.setTimestamp(QDateTime::fromString(cleanTime, Qt::ISODate));
+```
+
+After stripping `Z`, Qt parses the string without a timezone designator and stores it as a "local" `QDateTime`. Every other handler does:
+
+```cpp
+msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate));
+```
+
+`Qt::ISODate` correctly recognises the `Z` suffix and stores a `Qt::UTC` `QDateTime`. Because `coloredText()` calls `m_timestamp.toString("HH:mm:ss")` without an explicit local-time conversion, a `Qt::UTC` timestamp displays its UTC hour — not the user's local hour — for non-UTC users. The 332 branch accidentally avoids this by stripping `Z`, but then displays the server's noon as 12:00 regardless of the user's timezone (correct only if the user is already in UTC).
+
+The root cause: none of the handlers call `.toLocalTime()` after parsing, so the display is always wrong for non-UTC users except for the 332 branch which converts inadvertently via the wrong mechanism.
+
+**Fix hint.**
+
+Apply `.toLocalTime()` consistently after every `QDateTime::fromString(serverTime, Qt::ISODate)` call, and remove the Z-stripping from the 332 branch. The pattern to use everywhere:
+
+```cpp
+if (!serverTime.isEmpty())
+    msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate).toLocalTime());
+```
+
+This stores a local-time `QDateTime` so `m_timestamp.toString("HH:mm:ss")` displays the user's clock time.
+
+Also update `testTimestamp332Topic` in `tests/test_irc_parser.cpp` to reflect the corrected output. After fixing, `QDateTime::fromString("2024-01-01T12:00:00Z", Qt::ISODate).toLocalTime().toString(Qt::ISODate)` will include the local offset (e.g. `"2024-01-01T07:00:00-05:00"` for UTC−5). The test should be rewritten to check only the UTC-equivalent value instead of the raw `ISODate` string:
+
+```cpp
+QDateTime ts = mgr.lastChannelMessage.timestamp();
+QVERIFY(!ts.isNull());
+QCOMPARE(ts.toUTC().toString(Qt::ISODate), QString("2024-01-01T12:00:00Z"));
+```
+
+**Acceptance.**
+- In `testTimestamp332Topic`, `ts.toUTC().toString(Qt::ISODate)` equals `"2024-01-01T12:00:00Z"`.
+- For a PRIVMSG with `@time=2024-01-01T17:00:00Z`, a user in UTC−5 sees `12:00:00` in the chat timestamp.
+
+- [x] Done
 
 ---
 
@@ -157,12 +216,13 @@ connect(m_network, &NetworkManager::channelUsersChanged, this, [this](const QStr
 After all items above are resolved, run the following to confirm no regressions:
 
 ```
-[ ] cmake --build build --parallel  — builds clean, zero warnings on GCC (-Werror)
-[ ] ctest --output-on-failure       — all test binaries pass
-[ ] Manual: connect to irc.libera.chat:6667 (plain)
+[x] cmake --build build --parallel  — builds clean, zero warnings on GCC (-Werror)
+[x] ctest --output-on-failure       — all test binaries pass
+[x] Manual: connect to irc.libera.chat:6667 (plain)
     [ ] Join a channel with ops, voiced, and regular users
     [ ] User list shows @ops first, then +voiced, then regular, each group A–Z (M-21)
     [ ] After joining, new users appear in correct sorted position (M-21)
     [ ] After /mode #channel +o alice, alice immediately shows as @alice (M-22)
     [ ] After /mode #channel -v dave, +dave immediately shows as dave (M-22)
+    [ ] Message timestamps match local clock time for PRIVMSG, JOIN, PART, TOPIC (L-17)
 ```

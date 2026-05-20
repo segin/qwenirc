@@ -173,6 +173,17 @@ void MainWindow::initializeUI() {
     connect(m_network, &NetworkManager::namesReceived, this, &MainWindow::onNamesReceived);
     connect(m_network, &NetworkManager::namesComplete, this, &MainWindow::onNamesComplete);
     connect(m_network, &NetworkManager::queryTabNeeded, this, &MainWindow::addQueryTab);
+    connect(m_network, &NetworkManager::channelUsersChanged, this, [this](const QString& channel) {
+        if (m_currentChannel.toLower() != channel.toLower()) return;
+        m_userList->clear();
+        if (auto* ch = m_network->channel(channel)) {
+            for (const IRCUser& u : ch->users()) {
+                QString prefix = u.userPrefix();
+                m_userList->addItem(prefix.isEmpty() ? u.nick() : prefix + u.nick());
+            }
+        }
+        sortUserList();
+    });
 
     // CTCP signal handlers
     connect(m_network, &NetworkManager::ctcpRequest, this, [this](const QString& nick, const QString& cmd, const QString&) {
@@ -203,6 +214,7 @@ void MainWindow::initializeUI() {
             if (!found) {
                 m_userList->addItem(nick);
             }
+            sortUserList();
         }
     });
 
@@ -223,6 +235,7 @@ void MainWindow::initializeUI() {
                 QString prefix = u.userPrefix();
                 m_userList->addItem(prefix.isEmpty() ? u.nick() : prefix + u.nick());
             }
+            sortUserList();
         }
         m_userList->setVisible(true);
     });
@@ -404,6 +417,7 @@ void MainWindow::onUserJoined(const QString& channel, const IRCUser& user) {
     if (m_currentChannel.toLower() == norm) {
         QString entry = user.userPrefix().isEmpty() ? user.nick() : user.userPrefix() + user.nick();
         m_userList->addItem(entry);
+        sortUserList();
     }
 }
 
@@ -458,6 +472,7 @@ void MainWindow::onUserChangedNick(const QString& oldNick, const QString& newNic
                 break;
             }
         }
+        sortUserList();
     }
 }
 
@@ -528,6 +543,7 @@ void MainWindow::onNamesReceived(const QString& channel, const QList<IRCUser>& u
                 m_userList->addItem(nick);
             }
         }
+        sortUserList();
     }
 }
 
@@ -558,4 +574,31 @@ void MainWindow::addQueryTab(const QString& name) {
 
 ChannelTab* MainWindow::findQueryTab(const QString& name) {
     return findChannelTab(name);
+}
+
+void MainWindow::sortUserList() {
+    QString prefixSpec = m_network->isupport().value("PREFIX", "(qaohv)~&@%+");
+    int parenClose = prefixSpec.indexOf(')');
+    QString symbols = (parenClose >= 0) ? prefixSpec.mid(parenClose + 1) : QString("~&@%+");
+
+    auto sortKey = [&](const QString& entry) -> QPair<int, QString> {
+        int rank = symbols.size();
+        QString nick = entry;
+        while (!nick.isEmpty() && symbols.contains(nick[0]))
+            nick = nick.mid(1);
+        if (nick != entry) {
+            rank = symbols.indexOf(entry[0]);
+        }
+        return {rank, nick.toLower()};
+    };
+
+    QStringList items;
+    items.reserve(m_userList->count());
+    for (int i = 0; i < m_userList->count(); ++i)
+        items << m_userList->item(i)->text();
+    std::stable_sort(items.begin(), items.end(), [&](const QString& a, const QString& b) {
+        return sortKey(a) < sortKey(b);
+    });
+    m_userList->clear();
+    m_userList->addItems(items);
 }

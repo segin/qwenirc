@@ -50,6 +50,8 @@ private slots:
 
     void addQueryTab(const QString& name);
 
+    void sortUserList();
+
 private:
     ChannelTab* findChannelTab(const QString& name);
     ChannelTab* findQueryTab(const QString& name);

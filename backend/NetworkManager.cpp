@@ -495,7 +495,7 @@ void NetworkManager::handlePrivMsg(const QString& prefix, const QStringList& par
     IRCMessage msg(MessageType::Message, message, senderNick);
     msg.setChannel(chanName);
     if (!serverTime.isEmpty()) {
-        msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate));
+        msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate).toLocalTime());
     }
 
     // Handle CTCP messages (content wrapped in \001 delimiters)
@@ -514,7 +514,7 @@ void NetworkManager::handlePrivMsg(const QString& prefix, const QStringList& par
                 QString("* %1 %2").arg(senderNick).arg(ctcpText));
             actionMsg.setChannel(chanName);
             if (!serverTime.isEmpty()) {
-                actionMsg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate));
+                actionMsg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate).toLocalTime());
             }
             if (isPrivateMsg) {
                 emit channelMessage(senderNick, actionMsg);
@@ -572,7 +572,7 @@ void NetworkManager::handleNotice(const QString& prefix, const QStringList& para
     IRCMessage msg(MessageType::Notice, text, sender);
     msg.setChannel(target);
     if (!serverTime.isEmpty()) {
-        msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate));
+        msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate).toLocalTime());
     }
 
        QString chanTypes = m_isupport.value("CHANTYPES", "#");
@@ -609,7 +609,7 @@ void NetworkManager::handleNick(const QString& prefix, const QStringList& params
 
     IRCMessage msg(MessageType::NickChange, QString("%1 -> %2").arg(oldNick).arg(newNick), oldNick);
     if (!serverTime.isEmpty()) {
-        msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate));
+        msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate).toLocalTime());
     }
 
     QList<QString> keysToNotify;
@@ -661,7 +661,7 @@ void NetworkManager::handleJoin(const QString& prefix, const QStringList& params
 
     IRCMessage msg(MessageType::Join, chanName, nick);
     if (!serverTime.isEmpty()) {
-        msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate));
+        msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate).toLocalTime());
     }
 
     emit channelMessage(chanName, msg);
@@ -689,7 +689,7 @@ void NetworkManager::handlePart(const QString& prefix, const QStringList& params
     IRCMessage msg(MessageType::Part, reason, nick);
     msg.setChannel(chanName);
     if (!serverTime.isEmpty()) {
-        msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate));
+        msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate).toLocalTime());
     }
 
     emit channelMessage(chanName, msg);
@@ -726,6 +726,8 @@ void NetworkManager::handleMode(const QString& prefix, const QStringList& params
         QString chanModes = m_isupport.value("CHANMODES", "");
         ch->applyMode(mode, modeParams, prefix.section('!', 0, 0), prefixSpec, chanModes);
 
+        emit channelUsersChanged(target);
+
         IRCMessage msg(MessageType::Mode, modeStr, prefix.section('!', 0, 0));
         emit channelMessage(target, msg);
     }
@@ -747,10 +749,7 @@ void NetworkManager::handleTopic(const QString& prefix, const QStringList& param
 
     IRCMessage msg(MessageType::Topic, topic, prefix.section('!', 0, 0));
     if (!serverTime.isEmpty()) {
-        QString cleanTime = serverTime;
-        if (cleanTime.endsWith('Z'))
-            cleanTime.chop(1);
-        msg.setTimestamp(QDateTime::fromString(cleanTime, Qt::ISODate));
+        msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate).toLocalTime());
     }
     emit channelMessage(chanName, msg);
 }
@@ -761,7 +760,7 @@ void NetworkManager::handleQuit(const QString& prefix, const QStringList& params
 
     IRCMessage msg(MessageType::Quit, reason, nick);
     if (!serverTime.isEmpty()) {
-        msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate));
+        msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate).toLocalTime());
     }
 
     QList<QString> channelsWithUser;
@@ -797,7 +796,7 @@ void NetworkManager::handleKick(const QString& prefix, const QStringList& params
         kicker);
     msg.setChannel(chanName);
     if (!serverTime.isEmpty()) {
-        msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate));
+        msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate).toLocalTime());
     }
 
    emit channelMessage(chanName, msg);
@@ -939,10 +938,7 @@ void NetworkManager::handleNumericReply(const QString& numeric, const QString& p
         emit channelTopic(channel, topic);
         IRCMessage msg(MessageType::Topic, topic, prefix.section('!', 0, 0));
         if (!serverTime.isEmpty()) {
-            QString cleanTime = serverTime;
-            if (cleanTime.endsWith('Z'))
-                cleanTime.chop(1);
-            msg.setTimestamp(QDateTime::fromString(cleanTime, Qt::ISODate));
+            msg.setTimestamp(QDateTime::fromString(serverTime, Qt::ISODate).toLocalTime());
         }
         emit channelMessage(channel, msg);
     } else if (num == 333) {
